@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ApplyDay Extension</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="icons/icon48.png" alt="ApplyDay" class="logo">
+      <h1>ApplyDay Extension</h1>
+    </div>
+    
+    <div class="content">
+      <div class="section">
+        <h3>Current Page Info</h3>
+        <p id="current-url">Loading...</p>
+        <p id="page-title">Loading...</p>
+      </div>
+      
+      <div class="section">
+        <h3>Quick Actions</h3>
+        <button id="highlight-btn" class="action-btn">Highlight Text</button>
+        <button id="count-words-btn" class="action-btn">Count Words</button>
+        <button id="extract-links-btn" class="action-btn">Extract Links</button>
+      </div>
+      
+      <div class="section">
+        <h3>Settings</h3>
+        <label class="checkbox-label">
+          <input type="checkbox" id="auto-highlight"> Auto-highlight keywords
+        </label>
+        <button id="options-btn" class="secondary-btn">More Options</button>
+      </div>
+      
+      <div class="section">
+        <div id="result-area" class="result-area"></div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

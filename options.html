@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ApplyDay Extension Options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="header-content">
+        <img src="icons/icon48.png" alt="ApplyDay" class="logo">
+        <div class="header-text">
+          <h1>ApplyDay Extension Options</h1>
+          <p>Customize your extension settings and preferences</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <div class="settings-grid">
+        <!-- General Settings -->
+        <section class="settings-section">
+          <h2>General Settings</h2>
+          
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="auto-highlight" class="checkbox">
+              <span class="checkmark"></span>
+              Auto-highlight keywords on page load
+            </label>
+            <p class="setting-description">Automatically highlight job-related keywords when pages load</p>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="auto-analysis" class="checkbox">
+              <span class="checkmark"></span>
+              Auto-analyze pages
+            </label>
+            <p class="setting-description">Automatically analyze pages for job-related content</p>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="show-notifications" class="checkbox">
+              <span class="checkmark"></span>
+              Show notifications
+            </label>
+            <p class="setting-description">Display notifications for extension actions</p>
+          </div>
+        </section>
+
+        <!-- Appearance Settings -->
+        <section class="settings-section">
+          <h2>Appearance</h2>
+          
+          <div class="setting-item">
+            <label for="theme-select" class="setting-title">Theme</label>
+            <select id="theme-select" class="select-input">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="auto">Auto (Follow System)</option>
+            </select>
+            <p class="setting-description">Choose your preferred theme</p>
+          </div>
+
+          <div class="setting-item">
+            <label for="highlight-color" class="setting-title">Highlight Color</label>
+            <input type="color" id="highlight-color" class="color-input" value="#ffeb3b">
+            <p class="setting-description">Color used for highlighting text</p>
+          </div>
+        </section>
+
+        <!-- Keywords Settings -->
+        <section class="settings-section">
+          <h2>Keywords</h2>
+          
+          <div class="setting-item">
+            <label for="keyword-list" class="setting-title">Keyword List</label>
+            <textarea id="keyword-list" class="textarea-input" rows="4" 
+                      placeholder="Enter keywords separated by commas (e.g., job, career, hiring, apply)"></textarea>
+            <p class="setting-description">Keywords to highlight on web pages</p>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="case-sensitive" class="checkbox">
+              <span class="checkmark"></span>
+              Case sensitive matching
+            </label>
+            <p class="setting-description">Match keywords exactly as typed (case sensitive)</p>
+          </div>
+        </section>
+
+        <!-- Advanced Settings -->
+        <section class="settings-section">
+          <h2>Advanced</h2>
+          
+          <div class="setting-item">
+            <label for="analysis-delay" class="setting-title">Analysis Delay (seconds)</label>
+            <input type="range" id="analysis-delay" class="range-input" min="0" max="10" step="1" value="2">
+            <span id="analysis-delay-value" class="range-value">2</span>
+            <p class="setting-description">Delay before auto-analyzing pages</p>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="debug-mode" class="checkbox">
+              <span class="checkmark"></span>
+              Debug mode
+            </label>
+            <p class="setting-description">Enable debug logging in console</p>
+          </div>
+        </section>
+
+        <!-- Data Management -->
+        <section class="settings-section">
+          <h2>Data Management</h2>
+          
+          <div class="setting-item">
+            <button id="export-settings" class="action-btn secondary">Export Settings</button>
+            <p class="setting-description">Export your settings to a file</p>
+          </div>
+
+          <div class="setting-item">
+            <button id="import-settings" class="action-btn secondary">Import Settings</button>
+            <input type="file" id="import-file" accept=".json" style="display: none;">
+            <p class="setting-description">Import settings from a file</p>
+          </div>
+
+          <div class="setting-item">
+            <button id="reset-settings" class="action-btn danger">Reset to Defaults</button>
+            <p class="setting-description">Reset all settings to default values</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- Save Section -->
+      <div class="save-section">
+        <div class="save-status" id="save-status"></div>
+        <button id="save-settings" class="action-btn primary">Save Settings</button>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <p>&copy; 2024 ApplyDay Extension. Version 1.0.0</p>
+      <div class="footer-links">
+        <a href="#" id="help-link">Help</a>
+        <a href="#" id="feedback-link">Feedback</a>
+        <a href="#" id="privacy-link">Privacy</a>
+      </div>
+    </footer>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
