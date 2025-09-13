@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApplyDay Extension Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .test-section {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .keyword {
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .links-section a {
+            display: block;
+            margin: 5px 0;
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <h1>ApplyDay Extension Test Page</h1>
+    
+    <p>This page is designed to test the ApplyDay Extension functionality. 
+    Load this page with the extension installed to see highlighting and analysis features.</p>
+    
+    <div class="test-section">
+        <h2>Keywords to Test Auto-Highlighting</h2>
+        <p>This section contains several <span class="keyword">job</span> related keywords that should be highlighted automatically:</p>
+        <ul>
+            <li>Looking for a new <span class="keyword">job</span> opportunity</li>
+            <li>Start your <span class="keyword">career</span> in technology</li>
+            <li>We are currently <span class="keyword">hiring</span> talented developers</li>
+            <li><span class="keyword">Apply</span> now for this exciting position</li>
+            <li>Join our team and advance your <span class="keyword">career</span></li>
+            <li>Submit your <span class="keyword">application</span> today</li>
+        </ul>
+    </div>
+    
+    <div class="test-section">
+        <h2>Sample Content for Word Count</h2>
+        <p>This paragraph contains exactly fifty words to test the word counting functionality of the extension. 
+        The word count feature should analyze this content and provide accurate statistics about the total number 
+        of words, characters, and other text metrics for the entire page including headers and navigation elements.</p>
+    </div>
+    
+    <div class="test-section">
+        <h2>Links for Extraction Testing</h2>
+        <div class="links-section">
+            <a href="https://example.com/jobs">Example Jobs Page</a>
+            <a href="https://example.com/careers">Careers Section</a>
+            <a href="https://linkedin.com/jobs">LinkedIn Jobs</a>
+            <a href="https://indeed.com">Indeed Job Board</a>
+            <a href="mailto:careers@example.com">Email: careers@example.com</a>
+            <a href="https://github.com/example/repo">GitHub Repository</a>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Manual Highlighting Test</h2>
+        <p>Select any text in this section and use the extension's manual highlighting feature. 
+        You can also right-click on selected text to access context menu options.</p>
+        
+        <p>Try highlighting this sentence manually using the toggle highlight mode from the extension popup.</p>
+    </div>
+    
+    <div class="test-section">
+        <h2>Form Elements</h2>
+        <form>
+            <label for="position">Position Applied For:</label>
+            <input type="text" id="position" name="position" placeholder="e.g., Software Developer">
+            
+            <label for="experience">Years of Experience:</label>
+            <select id="experience" name="experience">
+                <option value="0-2">0-2 years</option>
+                <option value="3-5">3-5 years</option>
+                <option value="6-10">6-10 years</option>
+                <option value="10+">10+ years</option>
+            </select>
+            
+            <label for="cover-letter">Cover Letter:</label>
+            <textarea id="cover-letter" name="cover-letter" rows="4" 
+                      placeholder="Write your cover letter here..."></textarea>
+            
+            <button type="submit">Submit Application</button>
+        </form>
+    </div>
+    
+    <div class="test-section">
+        <h2>Testing Instructions</h2>
+        <ol>
+            <li><strong>Install the Extension:</strong> Load the unpacked extension in Chrome</li>
+            <li><strong>Open This Page:</strong> Navigate to this test page</li>
+            <li><strong>Test Auto-Highlighting:</strong> Enable auto-highlight in settings and reload</li>
+            <li><strong>Test Popup Features:</strong> Click the extension icon and try each button</li>
+            <li><strong>Test Manual Highlighting:</strong> Use toggle highlight mode</li>
+            <li><strong>Test Context Menu:</strong> Right-click anywhere on the page</li>
+            <li><strong>Test Settings:</strong> Open the options page and modify settings</li>
+            <li><strong>Test Analysis:</strong> Use the quick analyze feature</li>
+        </ol>
+    </div>
+    
+    <div class="test-section">
+        <h2>Expected Results</h2>
+        <ul>
+            <li>Keywords like "job", "career", "hiring", "apply" should be highlighted</li>
+            <li>Word count should show approximately 300+ words</li>
+            <li>Link extraction should find 6 links</li>
+            <li>Page analysis should detect job-related content</li>
+            <li>Extension indicator should appear in top-right corner</li>
+            <li>Context menu should show extension options</li>
+        </ul>
+    </div>
+    
+    <footer>
+        <p><em>ApplyDay Extension Test Page - Use this to verify all extension features are working correctly.</em></p>
+    </footer>
+</body>
+</html>
