@@ -1,5 +1,9 @@
 // background.js
 
+let globalState = {
+    selectedText: '',
+}
+
 // Initialize storage and context menu on installation
 chrome.runtime.onInstalled.addListener(async() => {
     console.log('Extension installed, initializing storage');
@@ -9,6 +13,7 @@ chrome.runtime.onInstalled.addListener(async() => {
         type: 'normal',
         contexts: ['selection']
     });
+    
 });
     
 
@@ -18,14 +23,25 @@ chrome.contextMenus.onClicked.addListener(async(item, tab) => {
 
     if (itd === 'add-to-applyday' && item.selectionText) {
         const selectedText = item.selectionText;
-        const pageUrl = item.pageUrl || (tab && tab.url) || 'unknown';
-
         console.log('Selected text:', selectedText);
-        console.log('Page URL:', pageUrl);
 
         // Store the selected text with its source URL
-        chrome.storage.local.set({
-            lastSelectedText: { text: selectedText, url: pageUrl }
-        })
+        globalState.selectedText = selectedText;
+
     }
 });
+
+// Listen for messages from other parts of the extension
+chrome.runtime.onMessage.addListener((Message, sender, sendResponse) => {
+    switch (Message.type) {
+        case 'GET_SELECTED_TEXT':
+            sendResponse({ selectedText: globalState.selectedText });
+            break;
+        case 'CLEAR_SELECTED_TEXT':
+            globalState.selectedText = '';
+            sendResponse({ success: true });
+            break;
+    }
+    return true; // Indicate that we will send a response asynchronously
+});
+
