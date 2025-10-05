@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { saveData, getData } from '../service';
+import storage from '../storage';
 
 function User() {
-    const [resume, setResume] = useState("");
+    const [context, setContext] = useState("");
     const [isHide, setIsHide] = useState(true);
     const isFirstSave = useRef(true); // For skipping the initializing
+    //TODO: Checking the LanguageModel availablity
+
 
     useEffect(() => {
         const doSave = async () => {
@@ -12,17 +14,18 @@ function User() {
                 if(isFirstSave.current){
                     return;
                 }
-                await saveData('resume', resume);
+                await storage.set('context', resume);
             } catch (e) {
                 console.error('saveData error', e);
             }
         };
         doSave();
     }, [resume])
+
     useEffect(() => {
         const load = async () => {
             try {
-                const data = await getData('resume');
+                const data = await storage.get('context');
                 if (typeof data !== 'undefined' && data !== null) {
                     setResume(data);
                 }
@@ -48,7 +51,7 @@ function User() {
             <button onClick={showInput}>Manage Resume</button>
             {!isHide &&
                 (<div>
-                    <input type='text' value={resume} onChange={handleChange} />
+                    <input type='text' value={context} onChange={handleChange} />
                 </div>)
             }
         </>
