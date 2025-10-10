@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Copilot Web - AI Text Completion",
+  "version": "1.0.0",
+  "description": "AI-powered text completion and chat assistant for web text editors with Chrome's built-in AI",
+  "minimum_chrome_version": "138",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "sidePanel"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open AI Assistant"
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "icons": {
+    "16": "vite.svg"
+  }
+}

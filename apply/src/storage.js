@@ -159,7 +159,6 @@ class MessageManager {
             }
         }
     }
-
     // Receiving message 
     handleMessage(message, sender, sendResponse) {
         const { type, data } = message;
@@ -198,7 +197,7 @@ class PortManager {
 }
 
 // Adding Port Manager
-const storage = new StorageManager();
+const storageManager = new StorageManager();
 const messageManager = new MessageManager();
 
-export { storage, messageManager }
+export { storageManager, messageManager }

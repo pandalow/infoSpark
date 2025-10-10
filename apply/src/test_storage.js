@@ -1,4 +1,4 @@
-import { messageManager, storage } from './storage.js';
+import { messageManager, storageManager } from './storage.js';
 
 global.chrome = {
     storage: {
@@ -51,7 +51,7 @@ global.chrome = {
 async function testStorageManager() {
 
     // 测试 set 方法
-    await storage.set('testKey', 'testValue');
+    await storageManager.set('testKey', 'testValue');
     console.log('Set testKey to testValue');
 
     // 测试 get 方法

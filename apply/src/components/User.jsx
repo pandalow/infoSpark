@@ -1,12 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
-import storage from '../storage';
+import { chromeMessaging } from '../chromeMessaging';
 
 function User() {
     const [context, setContext] = useState("");
     const [isHide, setIsHide] = useState(true);
-    const isFirstSave = useRef(true); // For skipping the initializing
-    //TODO: Checking the LanguageModel availablity
-
+    const isFirstSave = useRef(true);
 
     useEffect(() => {
         const doSave = async () => {
@@ -14,25 +12,26 @@ function User() {
                 if(isFirstSave.current){
                     return;
                 }
-                await storage.set('context', resume);
+                // 直接使用 Chrome Storage
+                await chromeMessaging.setStorage('context', context);
             } catch (e) {
                 console.error('saveData error', e);
             }
         };
         doSave();
-    }, [resume])
+    }, [context])
 
     useEffect(() => {
         const load = async () => {
             try {
-                const data = await storage.get('context');
+                // 直接使用 Chrome Storage
+                const data = await chromeMessaging.getStorage('context');
                 if (typeof data !== 'undefined' && data !== null) {
-                    setResume(data);
+                    setContext(data);
                 }
             } catch (e) {
                 console.error('getData error', e);
             } finally {
-                // Triggering the save function
                 isFirstSave.current = false;
             }
         };
@@ -40,15 +39,18 @@ function User() {
     }, [])
 
     function handleChange(event) {
-        setResume(event.target.value)
+        setContext(event.target.value)
     }
+    
     function showInput() {
         setIsHide(!isHide)
     }
-    console.log(resume)
+    
+    console.log(context)
+    
     return (
         <>
-            <button onClick={showInput}>Manage Resume</button>
+            <button onClick={showInput}>Manage</button>
             {!isHide &&
                 (<div>
                     <input type='text' value={context} onChange={handleChange} />
@@ -57,4 +59,5 @@ function User() {
         </>
     )
 }
+
 export default User;
