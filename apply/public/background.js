@@ -107,13 +107,16 @@ chrome.runtime.onStartup.addListener(() => {
   aiInitStatus()
 });
 
-
 messageManager.addListener('CHAT_WITH_AI', async (data, sender) => {
   return await handleAIChat(data);
 });
 
 messageManager.addListener('CHECK_STATUS', async () => {
   return await getAIStatus();
+})
+
+messageManager.addListener('START_CHAT', async(data, sender)=>{
+  return await 
 })
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -182,6 +185,7 @@ async function createPromptSession(params, retryCount = 0) {
     promptSession = null;
   }
 
+
   let sessionPromise;
   const availability = await checkingAvailability("PROMPT");
 
@@ -199,6 +203,7 @@ async function createPromptSession(params, retryCount = 0) {
   } else {
     throw new Error(`Language model is not available. Current status: ${availability}`);
   }
+  
   // 增加一个超时竞争逻辑, 用于预判如果出现创建超时, 返回报错信息.
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() =>
@@ -207,13 +212,14 @@ async function createPromptSession(params, retryCount = 0) {
 
   try {
     promptSession = await Promise.race([sessionPromise, timeoutPromise]);
-    return promptSession;
+    return {
+      success:true,
+      message:'Prompt session created successfully'
+    }
   } catch (error) {
     throw error;
   }
 }
-
-
 
 async function handleAIChat(data) {
   const { message, chatHistory } = data;
