@@ -1,7 +1,3 @@
-let isPromptAvailable = "unknown"
-let isWriterAvailable = "unknown"
-let promptSession = null;
-let writerSession = null;
 
 
 class MessageManager {
@@ -91,8 +87,36 @@ class PortManager {
     this.port = new Map();
     this.requestId = 0;
   }
-
 }
+
+let isPromptAvailable = "unknown"
+let isWriterAvailable = "unknown"
+let promptSession = null;
+let writerSession = null;
+let defaults = null;
+
+async function initDefaults() {
+  defaults = await LanguageModel.params();
+  console.log('Model default:', defaults);
+  if (!('LanguageModel' in self)) {
+    console.log("Prompt Model not available")
+  }
+  // Pending https://issues.chromium.org/issues/367771112.
+  // sliderTemperature.max = defaults.maxTemperature;
+}
+
+initDefaults();
+
+// Function
+async function aiInitStatus() {
+  const promptAvailability = await checkingAvailability("PROMPT");
+  isPromptAvailable = promptAvailability
+  const writerAvailability = await checkingAvailability("WRITER");
+  isWriterAvailable = writerAvailability
+}
+
+aiInitStatus()
+
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   aiInitStatus()
@@ -107,6 +131,11 @@ chrome.runtime.onStartup.addListener(() => {
   aiInitStatus()
 });
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  messageManager.handleMessage(message, sender, sendResponse);
+  return true;
+});
+
 messageManager.addListener('CHAT_WITH_AI', async (data, sender) => {
   return await handleAIChat(data);
 });
@@ -115,24 +144,6 @@ messageManager.addListener('CHECK_STATUS', async () => {
   return await getAIStatus();
 })
 
-messageManager.addListener('START_CHAT', async(data, sender)=>{
-  return await 
-})
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  messageManager.handleMessage(message, sender, sendResponse);
-  return true;
-});
-
-
-
-// Function
-async function aiInitStatus() {
-  const promptAvailability = await checkingAvailability("PROMPT");
-  isPromptAvailable = promptAvailability
-  const writerAvailability = await checkingAvailability("WRITER");
-  isWriterAvailable = writerAvailability
-}
 
 async function getAIStatus() {
   return {
@@ -173,89 +184,46 @@ async function resetAISession(type) {
   }
 }
 
-
-async function createPromptSession(params, retryCount = 0) {
-
-  if (promptSession) {
-    try {
-      promptSession.destroy();
-    } catch (err) {
-      console.warn('Error destroying prompt session', err);
-    }
-    promptSession = null;
-  }
-
-
-  let sessionPromise;
-  const availability = await checkingAvailability("PROMPT");
-
-  if (availability === "available") {
-    sessionPromise = LanguageModel.create(params);
-  } else if (availability === "downloadable" || availability === "downloading") {
-    sessionPromise = LanguageModel.create({
-      monitor(m) {
-        m.addEventListener('download progress', (e) => {
-          console.log(`Downloaded ${e.loaded * 100}%`);
-        });
-      },
-      ...params
-    });
-  } else {
-    throw new Error(`Language model is not available. Current status: ${availability}`);
-  }
-  
-  // 增加一个超时竞争逻辑, 用于预判如果出现创建超时, 返回报错信息.
-  const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() =>
-      reject(new Error('Session creation timeout')), 30000); // 增加超时时间
-  });
-
-  try {
-    promptSession = await Promise.race([sessionPromise, timeoutPromise]);
-    return {
-      success:true,
-      message:'Prompt session created successfully'
-    }
-  } catch (error) {
-    throw error;
-  }
-}
-
 async function handleAIChat(data) {
   const { message, chatHistory } = data;
 
-  // 先定义 initialPrompts
   const initialPrompts = [
     {
       role: 'system',
       content: 'You are a helpful and friendly coding assistant. Provide clear, concise responses.'
     }
   ];
-
-  if (chatHistory && chatHistory.length > 0) {
-    chatHistory.slice(-8).forEach(msg => {
-      initialPrompts.push({
-        role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content
-      });
-    });
-  }
-
   if (!promptSession) {
-    const params = {
-      initialPrompts,
-      temperature: 0.7,
-      topK: 5
-    };
-    await createPromptSession(params);
+    if (isPromptAvailable === "downloadable") {
+      promptSession = await LanguageModel.create({
+        initialPrompts,
+        temperature: 0.7,
+        topK: 3,
+        monitor(m) {
+          m.addEventListener('downloadprogress', (e) => {
+            console.log(`Downloaded ${e.loaded * 100}%`);
+          });
+        },
+      });
+    } else {
+      const params = {
+        initialPrompts,
+        temperature: 0.7,
+        topK: 3
+      };
+      promptSession = await LanguageModel.create(params);
+    }
   }
 
-  const responsePromise = promptSession.prompt(message);
-  const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Chat response timeout')), 30000);
-  });
+  let fullPrompt = message;
+  if (chatHistory && chatHistory.length > 0) {
+    const historyText = chatHistory.slice(-8).map(msg => 
+      `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
+    ).join('\n');
+    fullPrompt = `${historyText}\nUser: ${message}`;
+  }
 
-  const response = await Promise.race([responsePromise, timeoutPromise]);
+  const response = await promptSession.prompt(fullPrompt);
 
   return {
     response: response.trim(),
