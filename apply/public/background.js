@@ -81,14 +81,7 @@ class MessageManager {
 
 const messageManager = new MessageManager();
 
-class PortManager {
-
-  constructor() {
-    this.port = new Map();
-    this.requestId = 0;
-  }
-}
-
+// State
 let isPromptAvailable = "unknown"
 let isWriterAvailable = "unknown"
 let promptSession = null;
@@ -117,7 +110,6 @@ async function aiInitStatus() {
 
 aiInitStatus()
 
-
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   aiInitStatus()
   if (reason === 'install') {
@@ -144,6 +136,20 @@ messageManager.addListener('CHECK_STATUS', async () => {
   return await getAIStatus();
 })
 
+messageManager.addListener('RESET_SESSION', async (data) => {
+  const { type } = data;
+  await resetAISession(type);
+  return true;
+});
+
+messageManager.addListener('CREATE_WRITER', async () => {
+  await createWriter();
+  return true;
+});
+messageManager.addListener('CREATE_PROMPT', async () => {
+  createPrompt();
+  return true;
+});
 
 async function getAIStatus() {
   return {
@@ -184,9 +190,7 @@ async function resetAISession(type) {
   }
 }
 
-async function handleAIChat(data) {
-  const { message, chatHistory } = data;
-
+async function createPrompt() {
   const initialPrompts = [
     {
       role: 'system',
@@ -214,20 +218,56 @@ async function handleAIChat(data) {
       promptSession = await LanguageModel.create(params);
     }
   }
+}
 
+async function handleAIChat(data) {
+  const { message, chatHistory } = data;
   let fullPrompt = message;
   if (chatHistory && chatHistory.length > 0) {
-    const historyText = chatHistory.slice(-8).map(msg => 
+    const historyText = chatHistory.slice(-8).map(msg =>
       `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
     ).join('\n');
     fullPrompt = `${historyText}\nUser: ${message}`;
   }
 
   const response = await promptSession.prompt(fullPrompt);
-
   return {
     response: response.trim(),
     timestamp: Date.now()
   };
+}
+
+
+// Port Manage
+chrome.runtime.onConnect.addListener(function (port) {
+  if (port.name !== "writer") {
+    return;
+  }
+  port.onMessage.addListener(function (msg) {
+    if (msg.type === "COMPLETION") {
+      const stream = writer.writeStreaming(prompt);
+      for await (const chunk of stream) {
+        port.postMessage({
+          type: "STREAM_DATA",
+          data: chunk
+        })
+      }
+    }
+  });
+});
+
+async function createWriter() {
+  const options = {
+    tone: toneSelect.value,
+    length: lengthSelect.value,
+    format: formatSelect.value,
+    sharedContext: context.value.trim(),
+  };
+
+  if (!('Writer' in self)) {
+    console.error("Writer model not available in the current context");
+    return;
+  }
+  writerSession = await Writer.create(options);
 }
 
