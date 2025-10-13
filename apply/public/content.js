@@ -44,7 +44,6 @@ class CopilotWriter {
         try {
             this.createGhostOverlay();
             this.setupGlobalEventListeners(); // 统一的事件监听器设置
-            this.observeMutations();
             console.log('CopilotWriter initialized');
         } catch (error) {
             console.error('Error during CopilotWriter initialization:', error);
@@ -168,9 +167,9 @@ class CopilotWriter {
         try {
             if (this.currentCompletion && this.currentElement) {
                 const selection = window.getSelection();
-                if (selection.anchorNode && 
-                    (selection.anchorNode === this.currentElement || 
-                     this.currentElement.contains(selection.anchorNode))) {
+                if (selection.anchorNode &&
+                    (selection.anchorNode === this.currentElement ||
+                        this.currentElement.contains(selection.anchorNode))) {
                     this.hideGhostText();
                 }
             }
@@ -196,10 +195,10 @@ class CopilotWriter {
             this.isStreaming = true;
 
             const options = {
-                tone: 'friendly',
+                sharedContext: 'Complete the following text according to the input text.',
+                tone: 'casual',
+                format: 'plain-text',
                 length: 'medium',
-                format: 'plain_text',
-                sharedContext: context.before
             };
 
             requestCompletion(context.before, options);
@@ -363,16 +362,6 @@ class CopilotWriter {
         document.body.appendChild(this.ghostElement);
     }
 
-    observeMutations() {
-        const observer = new MutationObserver((mutations) => {
-            // DOM变化监听，但现在使用事件委托，这里可以简化或移除
-        });
-
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-    }
 
     isTextInput(element) {
         if (!element || !element.tagName) return false;

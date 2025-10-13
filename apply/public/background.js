@@ -222,6 +222,9 @@ async function createPrompt() {
 
 async function handleAIChat(data) {
   const { message, chatHistory } = data;
+  if(!promptSession){
+    createPrompt()
+  }
   let fullPrompt = message;
   if (chatHistory && chatHistory.length > 0) {
     const historyText = chatHistory.slice(-8).map(msg =>
@@ -252,7 +255,8 @@ chrome.runtime.onConnect.addListener(async (port) => {
           if (!writerSession) {
             writerSession = await Writer.create(options);
           }
-
+          const inquiry = "FIll in the following text:"
+          
           // 开始流式补全
           const stream = writerSession.writeStreaming(prompt);
 
@@ -275,19 +279,3 @@ chrome.runtime.onConnect.addListener(async (port) => {
     });
   }
 });
-
-async function createWriter() {
-  const options = {
-    tone: toneSelect.value,
-    length: lengthSelect.value,
-    format: formatSelect.value,
-    sharedContext: context.value.trim(),
-  };
-
-  if (!('Writer' in self)) {
-    console.error("Writer model not available in the current context");
-    return;
-  }
-  writerSession = await Writer.create(options);
-}
-
