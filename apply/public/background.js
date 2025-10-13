@@ -239,21 +239,41 @@ async function handleAIChat(data) {
 
 
 // Port Manage
-chrome.runtime.onConnect.addListener(function (port) {
-  if (port.name !== "writer") {
-    return;
-  }
-  port.onMessage.addListener(function (msg) {
-    if (msg.type === "COMPLETION") {
-      const stream = writer.writeStreaming(prompt);
-      for await (const chunk of stream) {
-        port.postMessage({
-          type: "STREAM_DATA",
-          data: chunk
-        })
+chrome.runtime.onConnect.addListener(async (port) => {
+  if (port.name === "AI_WRITER_STREAM") {
+    console.log('Writer stream connected');
+    
+    port.onMessage.addListener(async (message) => {
+      if (message.type === "START_STREAM") {
+        const { prompt, options } = message.data;
+
+        try {
+          // 创建 Writer 实例
+          if (!writerSession) {
+            writerSession = await Writer.create(options);
+          }
+
+          // 开始流式补全
+          const stream = writerSession.writeStreaming(prompt);
+
+          for await (const chunk of stream) {
+            // 逐步发送生成的文本块到前端
+            port.postMessage({ type: "STREAM_DATA", data: chunk });
+          }
+
+          // 发送流式输出结束的消息
+          port.postMessage({ type: "STREAM_END" });
+        } catch (error) {
+          console.error('Writer stream error:', error);
+          port.postMessage({ type: "STREAM_ERROR", error: error.message });
+        }
       }
-    }
-  });
+    });
+
+    port.onDisconnect.addListener(() => {
+      console.log("Writer stream disconnected");
+    });
+  }
 });
 
 async function createWriter() {
