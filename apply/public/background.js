@@ -142,13 +142,19 @@ messageManager.addListener('RESET_SESSION', async (data) => {
   return true;
 });
 
+
 messageManager.addListener('CREATE_WRITER', async () => {
   await createWriter();
   return true;
 });
+
 messageManager.addListener('CREATE_PROMPT', async () => {
   createPrompt();
   return true;
+});
+
+messageManager.addListener('COMPLETION_REQUEST', async (data, sender) => {
+    return await handleCompletionRequest(data);
 });
 
 async function getAIStatus() {
@@ -194,7 +200,7 @@ async function createPrompt() {
   const initialPrompts = [
     {
       role: 'system',
-      content: 'You are a helpful and friendly coding assistant. Provide clear, concise responses.'
+      content: 'You are a helpful and friendly job hunting assistant. Provide clear, concise responses.'
     }
   ];
   if (!promptSession) {
@@ -222,7 +228,7 @@ async function createPrompt() {
 
 async function handleAIChat(data) {
   const { message, chatHistory } = data;
-  if(!promptSession){
+  if (!promptSession) {
     createPrompt()
   }
   let fullPrompt = message;
@@ -240,31 +246,45 @@ async function handleAIChat(data) {
   };
 }
 
+async function handleCompletionRequest(data) {
+  const { prompt } = data;
+  console.log('Processing completion request for:', prompt);
+  // 确保 promptSession 存在
+  if (!promptSession) {
+    console.log('Creating new prompt session');
+    await createPrompt();
+  }
 
-// Port Manage
+  // 构建补全提示
+  const completionPrompt = `Complete the following code or text. Only return the completion part: ${prompt}`;
+
+  // 使用 Prompt API 获取补全
+  const response = await promptSession.prompt(completionPrompt);
+  console.log('Received completion response:', response);
+
+  return { completion: response.trim() };
+}
+
+
+// Port Manager
 chrome.runtime.onConnect.addListener(async (port) => {
   if (port.name === "AI_WRITER_STREAM") {
     console.log('Writer stream connected');
-    
+
     port.onMessage.addListener(async (message) => {
       if (message.type === "START_STREAM") {
-        const { prompt, options } = message.data;
+        const { prompt } = message.data;
 
         try {
           // 创建 Writer 实例
-          if (!writerSession) {
-            writerSession = await Writer.create(options);
+          if (!promptSession) {
+            promptSession = await createPrompt();
           }
           const inquiry = "FIll in the following text:"
-          
           // 开始流式补全
-          const stream = writerSession.writeStreaming(prompt);
+          const response = promptSession.prompt(`${inquiry}\n${prompt}`);
 
-          for await (const chunk of stream) {
-            // 逐步发送生成的文本块到前端
-            port.postMessage({ type: "STREAM_DATA", data: chunk });
-          }
-
+          port.postMessage({ type: "STREAM_START", data: { response } });
           // 发送流式输出结束的消息
           port.postMessage({ type: "STREAM_END" });
         } catch (error) {

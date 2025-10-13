@@ -1,93 +1,232 @@
-const port = chrome.runtime.connect({ name: "AI_WRITER_STREAM" });
-
-// 监听background消息
-port.onMessage.addListener(function (msg) {
-    if (msg.type === "STREAM_DATA") {
-        if (copilotWriter) {
-            copilotWriter.handleStreamData(msg.data);
-        }
-    } else if (msg.type === "STREAM_END") {
-        console.log("STREAM_END");
-        if (copilotWriter) {
-            copilotWriter.handleStreamEnd();
-        }
-    } else if (msg.type === "STREAM_ERROR") {
-        console.error("Stream error:", msg.error);
-        if (copilotWriter) {
-            copilotWriter.handleStreamError(msg.error);
-        }
+// 简化的请求函数保持不变
+async function sendCompletionRequest(prompt) {
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: "COMPLETION_REQUEST",
+            data: { prompt }
+        });
+        return response;
+    } catch (error) {
+        console.error('Error requesting completion:', error);
+        throw error;
     }
-});
-
-// 发送消息到background
-function requestCompletion(prompt, options) {
-    port.postMessage({
-        type: "START_STREAM",
-        data: { prompt, options }
-    });
 }
 
 class CopilotWriter {
     constructor() {
         this.currentElement = null;
-        this.ghostElement = null;
+        this.completionPanel = null; // 改为固定面板
         this.currentCompletion = "";
         this.debounceTimer = null;
         this.completionCache = new Map();
         this.isEnabled = true;
-        this.isStreaming = false;
+        this.isRequesting = false;
 
         this.init();
     }
 
     async init() {
         try {
-            this.createGhostOverlay();
-            this.setupGlobalEventListeners(); // 统一的事件监听器设置
+            this.createCompletionPanel(); // 创建固定面板
+            this.setupGlobalEventListeners();
             console.log('CopilotWriter initialized');
         } catch (error) {
             console.error('Error during CopilotWriter initialization:', error);
         }
     }
 
+    // 创建固定的补全面板
+    createCompletionPanel() {
+        // 创建主容器
+        this.completionPanel = document.createElement('div');
+        this.completionPanel.id = 'copilot-completion-panel';
+        this.completionPanel.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 400px;
+            max-height: 300px;
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 999999;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 14px;
+            display: none;
+            overflow: hidden;
+        `;
+
+        // 创建标题栏
+        const titleBar = document.createElement('div');
+        titleBar.style.cssText = `
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 8px 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #4a5568;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        `;
+        titleBar.innerHTML = `
+            <span>🤖 AI 补全</span>
+            <button id="copilot-close-btn" style="
+                background: none;
+                border: none;
+                color: #e2e8f0;
+                cursor: pointer;
+                font-size: 16px;
+                padding: 0;
+                width: 20px;
+                height: 20px;
+            ">×</button>
+        `;
+
+        // 创建内容区域
+        const contentArea = document.createElement('div');
+        contentArea.style.cssText = `
+            padding: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        `;
+
+        // 创建补全文本显示区域
+        this.completionText = document.createElement('div');
+        this.completionText.id = 'copilot-completion-text';
+        this.completionText.style.cssText = `
+            color: #e2e8f0;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin-bottom: 12px;
+            min-height: 60px;
+            background: #1a202c;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #4a5568;
+        `;
+        this.completionText.textContent = '等待补全内容...';
+
+        // 创建按钮容器
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = `
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        `;
+
+        // 创建接受补全按钮
+        const acceptButton = document.createElement('button');
+        acceptButton.id = 'copilot-accept-btn';
+        acceptButton.textContent = '✓ 接受补全';
+        acceptButton.style.cssText = `
+            flex: 1;
+            background: #48bb78;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        `;
+
+        // 创建全文重写按钮
+        const rewriteButton = document.createElement('button');
+        rewriteButton.id = 'copilot-rewrite-btn';
+        rewriteButton.textContent = '📝 全文重写';
+        rewriteButton.style.cssText = `
+            flex: 1;
+            background: #ed8936;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        `;
+
+        // 创建Writer按钮
+        const writerButton = document.createElement('button');
+        writerButton.id = 'copilot-writer-btn';
+        writerButton.textContent = '✍️ Writer';
+        writerButton.style.cssText = `
+            flex: 1;
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        `;
+
+        // 组装面板
+        buttonContainer.appendChild(acceptButton);
+        buttonContainer.appendChild(rewriteButton);
+        buttonContainer.appendChild(writerButton);
+
+        contentArea.appendChild(this.completionText);
+        contentArea.appendChild(buttonContainer);
+
+        this.completionPanel.appendChild(titleBar);
+        this.completionPanel.appendChild(contentArea);
+
+        document.body.appendChild(this.completionPanel);
+
+        // 绑定事件
+        this.setupPanelEvents();
+    }
+
+    // 设置面板事件
+    setupPanelEvents() {
+        // 关闭按钮
+        const closeBtn = document.getElementById('copilot-close-btn');
+        closeBtn.addEventListener('click', () => {
+            this.hideCompletionPanel();
+        });
+
+        // 接受补全按钮
+        const acceptBtn = document.getElementById('copilot-accept-btn');
+        acceptBtn.addEventListener('click', () => {
+            this.acceptCompletion();
+        });
+
+        // 全文重写按钮
+        const rewriteBtn = document.getElementById('copilot-rewrite-btn');
+        rewriteBtn.addEventListener('click', () => {
+            this.rewriteFullText();
+        });
+
+        // Writer按钮
+        const writerBtn = document.getElementById('copilot-writer-btn');
+        writerBtn.addEventListener('click', () => {
+            this.openWriter();
+        });
+
+        // 添加悬停效果
+        [acceptBtn, rewriteBtn, writerBtn].forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                btn.style.opacity = '0.8';
+                btn.style.transform = 'translateY(-1px)';
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.opacity = '1';
+                btn.style.transform = 'translateY(0)';
+            });
+        });
+    }
+
     // 统一设置全局事件监听器
     setupGlobalEventListeners() {
-        // 使用事件委托，避免为每个元素单独绑定
         document.addEventListener('focusin', this.handleFocusIn.bind(this));
         document.addEventListener('focusout', this.handleFocusOut.bind(this));
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
         document.addEventListener('input', this.handleInput.bind(this));
         document.addEventListener('click', this.handleClick.bind(this));
-        document.addEventListener('selectionchange', this.handleSelectionChange.bind(this));
-    }
-
-    // 流式数据处理方法
-    handleStreamData(chunk) {
-        try {
-            this.currentCompletion += chunk;
-            this.showGhostText(this.currentCompletion);
-        } catch (error) {
-            console.error('Error handling stream data:', error);
-        }
-    }
-
-    handleStreamEnd() {
-        try {
-            this.isStreaming = false;
-            console.log('Stream completed, final completion:', this.currentCompletion);
-        } catch (error) {
-            console.error('Error handling stream end:', error);
-        }
-    }
-
-    handleStreamError(error) {
-        try {
-            this.isStreaming = false;
-            this.hideGhostText();
-            console.error('Stream error:', error);
-        } catch (error) {
-            console.error('Error handling stream error:', error);
-        }
     }
 
     // 事件处理方法
@@ -105,8 +244,9 @@ class CopilotWriter {
     handleFocusOut(event) {
         try {
             if (event.target === this.currentElement) {
-                this.hideGhostText();
-                this.currentElement = null;
+                // 不再自动隐藏面板，让用户手动控制
+                // this.hideCompletionPanel();
+                // this.currentElement = null;
             }
         } catch (error) {
             console.error('Error in handleFocusOut:', error);
@@ -117,20 +257,18 @@ class CopilotWriter {
         if (!this.currentElement || !this.isEnabled) return;
 
         try {
-            if (event.key === 'Tab' && this.currentCompletion) {
+            // Tab键接受补全
+            if (event.key === 'Tab' && this.currentCompletion && this.completionPanel.style.display === 'block') {
                 event.preventDefault();
                 this.acceptCompletion();
                 return;
             }
 
-            if (event.key === 'Escape' && this.currentCompletion) {
+            // Escape键隐藏面板
+            if (event.key === 'Escape' && this.completionPanel.style.display === 'block') {
                 event.preventDefault();
-                this.hideGhostText();
+                this.hideCompletionPanel();
                 return;
-            }
-
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
-                this.hideGhostText();
             }
         } catch (error) {
             console.error('Error in handleKeyDown:', error);
@@ -147,8 +285,6 @@ class CopilotWriter {
                 clearTimeout(this.debounceTimer);
             }
 
-            this.hideGhostText();
-
             this.debounceTimer = setTimeout(() => {
                 this.requestCompletion();
             }, 300);
@@ -158,59 +294,135 @@ class CopilotWriter {
     }
 
     handleClick(event) {
-        if (event.target === this.currentElement && this.currentCompletion) {
-            this.hideGhostText();
-        }
-    }
-
-    handleSelectionChange() {
-        try {
-            if (this.currentCompletion && this.currentElement) {
-                const selection = window.getSelection();
-                if (selection.anchorNode &&
-                    (selection.anchorNode === this.currentElement ||
-                        this.currentElement.contains(selection.anchorNode))) {
-                    this.hideGhostText();
-                }
-            }
-        } catch (error) {
-            console.error('Error in handleSelectionChange:', error);
+        // 点击面板外部隐藏面板
+        if (this.completionPanel.style.display === 'block' && 
+            !this.completionPanel.contains(event.target) &&
+            event.target !== this.currentElement) {
+            this.hideCompletionPanel();
         }
     }
 
     // 核心功能方法
     async requestCompletion() {
-        if (!this.currentElement || !this.isEnabled || this.isStreaming) {
+        if (!this.currentElement || !this.isEnabled || this.isRequesting) {
+            console.log('Request skipped: no element, disabled, or already requesting');
             return;
         }
 
         try {
             const context = this.getTextContext();
             if (!context.before.trim()) {
-                this.hideGhostText();
+                console.log('Request skipped: empty context');
+                this.hideCompletionPanel();
                 return;
             }
 
+            // 检查缓存
+            const cacheKey = this.generateCacheKey(context);
+            if (this.completionCache.has(cacheKey)) {
+                const cachedCompletion = this.completionCache.get(cacheKey);
+                this.currentCompletion = cachedCompletion;
+                this.showCompletionPanel(cachedCompletion);
+                return;
+            }
+
+            this.isRequesting = true;
             this.currentCompletion = '';
-            this.isStreaming = true;
+            
+            // 显示加载状态
+            this.showCompletionPanel('正在生成补全内容...');
 
-            const options = {
-                sharedContext: 'Complete the following text according to the input text.',
-                tone: 'casual',
-                format: 'plain-text',
-                length: 'medium',
-            };
+            console.log('Requesting AI completion for context:', context.before);
 
-            requestCompletion(context.before, options);
+            const response = await sendCompletionRequest(context.before);
+            const completion = response.data.completion;
+            if (completion) {
+                this.currentCompletion = completion;
+                this.completionCache.set(cacheKey, completion);
+                this.showCompletionPanel(completion);
+                console.log('Received completion:', completion);
+            } else {
+                this.showCompletionPanel('暂无补全建议');
+                console.log('No completion received:', response);
+            }
 
         } catch (error) {
             console.error('Error requesting completion:', error);
-            this.hideGhostText();
-            this.isStreaming = false;
+            this.showCompletionPanel('补全失败，请重试');
+        } finally {
+            this.isRequesting = false;
         }
     }
 
-    // 工具方法
+    // 显示补全面板
+    showCompletionPanel(completion) {
+        if (!this.completionPanel || !this.completionText) return;
+
+        this.completionText.textContent = completion;
+        this.completionPanel.style.display = 'block';
+
+        // 如果是加载状态，禁用按钮
+        const isLoading = completion === '正在生成补全内容...';
+        const buttons = this.completionPanel.querySelectorAll('button:not(#copilot-close-btn)');
+        buttons.forEach(btn => {
+            btn.disabled = isLoading;
+            btn.style.opacity = isLoading ? '0.5' : '1';
+        });
+    }
+
+    // 隐藏补全面板
+    hideCompletionPanel() {
+        if (this.completionPanel) {
+            this.completionPanel.style.display = 'none';
+        }
+        this.currentCompletion = '';
+    }
+
+    // 接受补全
+    acceptCompletion() {
+        if (!this.currentCompletion || !this.currentElement) {
+            return;
+        }
+
+        try {
+            const cursorPos = this.getCursorPosition();
+            const currentText = this.currentElement.value || this.currentElement.textContent || '';
+            const newText = currentText.substring(0, cursorPos) + this.currentCompletion + currentText.substring(cursorPos);
+
+            if (this.currentElement.value !== undefined) {
+                this.currentElement.value = newText;
+                this.currentElement.selectionStart = this.currentElement.selectionEnd = cursorPos + this.currentCompletion.length;
+            } else {
+                this.currentElement.textContent = newText;
+            }
+
+            this.hideCompletionPanel();
+            this.currentElement.dispatchEvent(new Event('input', { bubbles: true }));
+            this.currentElement.focus();
+        } catch (error) {
+            console.error('Error accepting completion:', error);
+        }
+    }
+
+    // 全文重写功能
+    async rewriteFullText() {
+        console.log('Rewrite full text feature is not implemented yet.');
+        // 这里可以打开一个新的窗口或面板，加载 Rewriter 界面
+        // window.open('rewriter.html', '_blank', 'width=600,height=800');
+    }
+
+    // 打开Writer功能
+    async openWriter() {
+        console.log('Writer feature is not implemented yet.');
+        // 这里可以打开一个新的窗口或面板，加载 Writer 界面
+        // window.open('writer.html', '_blank', 'width=600,height=800');
+    }
+
+    // 其他工具方法保持不变
+    generateCacheKey(context) {
+        return `${context.before}_${context.after}`.slice(0, 100);
+    }
+
     getTextContext() {
         if (!this.currentElement) {
             return { before: '', after: '' };
@@ -250,118 +462,6 @@ class CopilotWriter {
 
         return 0;
     }
-
-    // UI 方法
-    showGhostText(completion) {
-        if (!completion || !this.currentElement || !this.ghostElement) {
-            return;
-        }
-
-        try {
-            const position = this.getElementPosition();
-            const cursorOffset = this.getCursorOffset();
-
-            this.ghostElement.textContent = completion;
-            this.ghostElement.style.left = (position.left + cursorOffset.left) + 'px';
-            this.ghostElement.style.top = (position.top + cursorOffset.top) + 'px';
-            this.ghostElement.style.display = 'block';
-        } catch (error) {
-            console.error('Error showing ghost text:', error);
-        }
-    }
-
-    hideGhostText() {
-        try {
-            if (this.ghostElement) {
-                this.ghostElement.style.display = 'none';
-                this.ghostElement.textContent = '';
-            }
-            this.currentCompletion = '';
-        } catch (error) {
-            console.error('Error hiding ghost text:', error);
-        }
-    }
-
-    acceptCompletion() {
-        if (!this.currentCompletion || !this.currentElement) {
-            return;
-        }
-
-        try {
-            const cursorPos = this.getCursorPosition();
-            const currentText = this.currentElement.value || this.currentElement.textContent || '';
-            const newText = currentText.substring(0, cursorPos) + this.currentCompletion + currentText.substring(cursorPos);
-
-            if (this.currentElement.value !== undefined) {
-                this.currentElement.value = newText;
-                this.currentElement.selectionStart = this.currentElement.selectionEnd = cursorPos + this.currentCompletion.length;
-            } else {
-                this.currentElement.textContent = newText;
-            }
-
-            this.hideGhostText();
-            this.currentElement.dispatchEvent(new Event('input', { bubbles: true }));
-        } catch (error) {
-            console.error('Error accepting completion:', error);
-        }
-    }
-
-    // 辅助方法保持不变
-    getElementPosition() {
-        if (!this.currentElement) return { left: 0, top: 0 };
-
-        try {
-            const rect = this.currentElement.getBoundingClientRect();
-            return {
-                left: rect.left + window.scrollX,
-                top: rect.top + window.scrollY
-            };
-        } catch (error) {
-            return { left: 0, top: 0 };
-        }
-    }
-
-    getCursorOffset() {
-        if (!this.currentElement) return { left: 0, top: 0 };
-
-        try {
-            const cursorPos = this.getCursorPosition();
-            const text = this.currentElement.value || this.currentElement.textContent || '';
-            const textBeforeCursor = text.substring(0, cursorPos);
-
-            const styles = window.getComputedStyle(this.currentElement);
-            const fontSize = parseInt(styles.fontSize) || 14;
-            const lineHeight = parseInt(styles.lineHeight) || fontSize * 1.2;
-
-            const lines = textBeforeCursor.split('\n');
-            const currentLine = lines[lines.length - 1];
-
-            return {
-                left: currentLine.length * (fontSize * 0.6),
-                top: (lines.length - 1) * lineHeight
-            };
-        } catch (error) {
-            return { left: 0, top: 0 };
-        }
-    }
-
-    createGhostOverlay() {
-        this.ghostElement = document.createElement('div');
-        this.ghostElement.id = 'copilot-ghost-text';
-        this.ghostElement.style.cssText = `
-            position: absolute;
-            pointer-events: none;
-            z-index: 999999;
-            color: #9ca3af;
-            opacity: 0.6;
-            font-family: inherit;
-            font-size: inherit;
-            white-space: pre;
-            display: none;
-        `;
-        document.body.appendChild(this.ghostElement);
-    }
-
 
     isTextInput(element) {
         if (!element || !element.tagName) return false;
