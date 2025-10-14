@@ -274,7 +274,6 @@ class CopilotWriter {
             console.error('Error in handleKeyDown:', error);
         }
     }
-
     handleInput(event) {
         if (!this.currentElement || !this.isEnabled || event.target !== this.currentElement) {
             return;
@@ -292,10 +291,9 @@ class CopilotWriter {
             console.error('Error in handleInput:', error);
         }
     }
-
     handleClick(event) {
         // 点击面板外部隐藏面板
-        if (this.completionPanel.style.display === 'block' && 
+        if (this.completionPanel.style.display === 'block' &&
             !this.completionPanel.contains(event.target) &&
             event.target !== this.currentElement) {
             this.hideCompletionPanel();
@@ -311,41 +309,44 @@ class CopilotWriter {
 
         try {
             const context = this.getTextContext();
-            if (!context.before.trim()) {
-                console.log('Request skipped: empty context');
+            const fullText = context.fullText.trim();
+
+            if (!fullText) {
+                console.log('Request skipped: empty input');
                 this.hideCompletionPanel();
                 return;
             }
 
             // 检查缓存
-            const cacheKey = this.generateCacheKey(context);
+            const cacheKey = this.generateCacheKey({ fullText });
             if (this.completionCache.has(cacheKey)) {
                 const cachedCompletion = this.completionCache.get(cacheKey);
                 this.currentCompletion = cachedCompletion;
                 this.showCompletionPanel(cachedCompletion);
+                console.log('使用缓存的补全结果');
                 return;
             }
 
+
             this.isRequesting = true;
             this.currentCompletion = '';
-            
+
             // 显示加载状态
             this.showCompletionPanel('正在生成补全内容...');
+            console.log('发送补全请求，文本内容:', fullText);
 
-            console.log('Requesting AI completion for context:', context.before);
 
-            const response = await sendCompletionRequest(context.before);
-            const completion = response.data.completion;
+            const response = await sendCompletionRequest(fullText);
+            const completion = response.data.completion || response.completion;
             if (completion) {
                 this.currentCompletion = completion;
                 this.completionCache.set(cacheKey, completion);
                 this.showCompletionPanel(completion);
-                console.log('Received completion:', completion);
+                console.log('补全成功:', completion);
             } else {
                 this.showCompletionPanel('暂无补全建议');
-                console.log('No completion received:', response);
+                console.log('未收到有效的补全内容:', response);
             }
-
         } catch (error) {
             console.error('Error requesting completion:', error);
             this.showCompletionPanel('补全失败，请重试');
@@ -385,13 +386,11 @@ class CopilotWriter {
         }
 
         try {
-            const cursorPos = this.getCursorPosition();
             const currentText = this.currentElement.value || this.currentElement.textContent || '';
-            const newText = currentText.substring(0, cursorPos) + this.currentCompletion + currentText.substring(cursorPos);
+            const newText = currentText + this.currentCompletion;
 
             if (this.currentElement.value !== undefined) {
                 this.currentElement.value = newText;
-                this.currentElement.selectionStart = this.currentElement.selectionEnd = cursorPos + this.currentCompletion.length;
             } else {
                 this.currentElement.textContent = newText;
             }
@@ -420,25 +419,20 @@ class CopilotWriter {
 
     // 其他工具方法保持不变
     generateCacheKey(context) {
-        return `${context.before}_${context.after}`.slice(0, 100);
+        return context.fullText.slice(0, 100); // 使用前 100 个字符作为缓存键
     }
-
     getTextContext() {
         if (!this.currentElement) {
-            return { before: '', after: '' };
+            return { fullText: '' };
         }
 
         try {
-            const cursorPos = this.getCursorPosition();
             const text = this.currentElement.value || this.currentElement.textContent || '';
-
-            return {
-                before: text.substring(0, cursorPos),
-                after: text.substring(cursorPos)
-            };
+            console.log('获取的完整文本:', text);
+            return { fullText: text };
         } catch (error) {
             console.error('Error getting text context:', error);
-            return { before: '', after: '' };
+            return { fullText: '' };
         }
     }
 
