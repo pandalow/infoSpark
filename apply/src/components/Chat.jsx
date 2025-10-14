@@ -33,7 +33,7 @@ function Chat() {
     function handleEnableClick() {
         setEnablePrompt(!enablePrompt)
         if (!enablePrompt) {
-            manageCompletion('CREATE_PROMPT')
+            manageCompletion('CREATE_COMPLETION_SESSION')
         } else {
             manageCompletion('RESET_SESSION')
         }

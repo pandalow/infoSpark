@@ -247,7 +247,7 @@ async function handleCompletionRequest(data) {
 async function createWriterSession() {
   const options = {
     tone: 'casual',
-    length: 'Medium',
+    length: 'medium',
     format: 'plain-text',
     sharedContext: '',
   };
@@ -258,43 +258,57 @@ async function createWriterSession() {
 async function createRewriterSession() {
   const options = {
     tone: 'casual',
-    length: 'Medium',
+    length: 'medium',
     format: 'plain-text',
     sharedContext: '',
   };
   if (!rewriterSession) {
     rewriterSession = await Rewriter.create(options)
   }
-const port = chrome.runtime.connect({ name: "AI_WRITER_STREAM" });
+}
 
 chrome.runtime.onConnect.addListener((port) => {
+  console.log('New port connection received:', port.name);
+  if (port.name === "AI_WRITER_STREAM") {
+    console.log('Writer stream connected');
 
-  port.onMessage.addListener(async (message) => {
-    if (message.type === "WRITER_STREAM") {
-      const { prompt } = message.data;
-      if (!writerSession) {
-        writerSession = await createWriterSession();
+    port.onMessage.addListener(async (message) => {
+      console.log('Port received message:', message);
+      if (message.type === "WRITER_STREAM") {
+        console.log('Processing WRITER_STREAM request');
+        const { prompt } = message.data;
+        if (!writerSession) {
+          console.log('Creating writer session...');
+          await createWriterSession();
+        }
+        console.log('Starting writeStreaming...');
+        const stream = writerSession.writeStreaming(prompt, { context: '' });
+        for await (const chunk of stream) {
+          console.log('Sending chunk:', chunk);
+          port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+        }
+        console.log('Stream completed');
+        port.postMessage({ type: "STREAM_END" });
+      } else if (message.type === "REWRITER_STREAM") {
+        console.log('Processing REWRITER_STREAM request');
+        const { prompt } = message.data;
+        if (!rewriterSession) {
+          console.log('Creating rewriter session...');
+          await createRewriterSession();
+        }
+        console.log('Starting rewriteStreaming...');
+        const stream = rewriterSession.rewriteStreaming(prompt, { context: '' });
+        for await (const chunk of stream) {
+          console.log('Sending rewrite chunk:', chunk);
+          port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+        }
+        console.log('Rewrite stream completed');
+        port.postMessage({ type: "STREAM_END" });
       }
-      const stream = writerSession.writeStreaming(prompt, { context: '' });
-      for await (const chunk of stream) {
-        port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
-      }
-      port.postMessage({ type: "STREAM_END" });
-    }else if (message.type === "REWRITER_STREAM") {
-      const { prompt } = message.data;
-      if (!rewriterSession) {
-        rewriterSession = await createRewriterSession();
-      }
-      const stream = rewriterSession.rewriteStreaming(prompt, { context: '' });
-      for await (const chunk of stream) {
-        port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
-      }
-      port.postMessage({ type: "STREAM_END" });
-    }
-  });
+    });
 
-  port.onDisconnect.addListener(() => {
-    console.log("Writer stream disconnected");
-  });
+    port.onDisconnect.addListener(() => {
+      console.log("Writer stream disconnected");
+    });
+  }
 });
-}
