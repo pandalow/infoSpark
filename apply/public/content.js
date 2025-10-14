@@ -12,6 +12,31 @@ async function sendCompletionRequest(prompt) {
     }
 }
 
+let copilotWriter = null;
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message && message.type === 'INIT_COPILOT_WRITER') {
+        if (!copilotWriter) {
+            copilotWriter = new CopilotWriter();
+            sendResponse({ success: true, message: 'CopilotWriter initialized' });
+        } else {
+            sendResponse({ success: false, message: 'Already initialized' });
+        }
+    }
+    // 新增：销毁 CopilotWriter
+    if (message && message.type === 'DESTROY_COPILOT_WRITER') {
+        if (copilotWriter) {
+            // 可选：移除面板等清理操作
+            copilotWriter.destroy();
+            copilotWriter = null;
+            console.log('CopilotWriter destroyed');
+            sendResponse({ success: true, message: 'CopilotWriter destroyed' });
+        } else {
+            sendResponse({ success: false, message: 'Not initialized' });
+        }
+    }
+});
+
 class CopilotWriter {
     constructor() {
         this.currentElement = null;
@@ -222,11 +247,17 @@ class CopilotWriter {
 
     // 统一设置全局事件监听器
     setupGlobalEventListeners() {
-        document.addEventListener('focusin', this.handleFocusIn.bind(this));
-        document.addEventListener('focusout', this.handleFocusOut.bind(this));
-        document.addEventListener('keydown', this.handleKeyDown.bind(this));
-        document.addEventListener('input', this.handleInput.bind(this));
-        document.addEventListener('click', this.handleClick.bind(this));
+        this.handleFocusInBound = this.handleFocusIn.bind(this);
+        this.handleFocusOutBound = this.handleFocusOut.bind(this);
+        this.handleKeyDownBound = this.handleKeyDown.bind(this);
+        this.handleInputBound = this.handleInput.bind(this);
+        this.handleClickBound = this.handleClick.bind(this);
+
+        document.addEventListener('focusin', this.handleFocusInBound);
+        document.addEventListener('focusout', this.handleFocusOutBound);
+        document.addEventListener('keydown', this.handleKeyDownBound);
+        document.addEventListener('input', this.handleInputBound);
+        document.addEventListener('click', this.handleClickBound);
     }
 
     // 事件处理方法
@@ -410,12 +441,30 @@ class CopilotWriter {
         // window.open('rewriter.html', '_blank', 'width=600,height=800');
     }
 
+
+    destroy() {
+        // 移除全局事件监听
+        document.removeEventListener('focusin', this.handleFocusInBound);
+        document.removeEventListener('focusout', this.handleFocusOutBound);
+        document.removeEventListener('keydown', this.handleKeyDownBound);
+        document.removeEventListener('input', this.handleInputBound);
+        document.removeEventListener('click', this.handleClickBound);
+
+        // 移除面板
+        if (this.completionPanel) {
+            this.completionPanel.remove();
+        }
+        // 其他清理...
+    }
+
+
     // 打开Writer功能
     async openWriter() {
         console.log('Writer feature is not implemented yet.');
         // 这里可以打开一个新的窗口或面板，加载 Writer 界面
         // window.open('writer.html', '_blank', 'width=600,height=800');
     }
+
 
     // 其他工具方法保持不变
     generateCacheKey(context) {
@@ -469,14 +518,4 @@ class CopilotWriter {
             element.contentEditable === 'true'
         );
     }
-}
-
-// 初始化
-let copilotWriter;
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        copilotWriter = new CopilotWriter();
-    });
-} else {
-    copilotWriter = new CopilotWriter();
 }

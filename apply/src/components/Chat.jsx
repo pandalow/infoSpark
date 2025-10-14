@@ -10,10 +10,34 @@ function Chat() {
         prompt: "processing",
         writer: "processing"
     })
+    const [enablePrompt, setEnablePrompt] = useState(false)
 
     useEffect(() => {
-        getAiStatus()
+        
     }, [])
+
+    async function manageCompletion(type) {
+        try {
+            chrome.runtime.sendMessage({type: type}, (response) => {
+                if (response && response.success) {
+                    getAiStatus()
+                } else {
+                    console.error('Error managing completion:', response.error);
+                }
+            });
+        } catch (error) {
+            console.error('Error managing completion:', error);
+        }
+    }
+
+    function handleEnableClick() {
+        setEnablePrompt(!enablePrompt)
+        if (!enablePrompt) {
+            manageCompletion('CREATE_PROMPT')
+        } else {
+            manageCompletion('RESET_SESSION')
+        }
+    }
 
     async function getAiStatus() {
         chrome.runtime.sendMessage({ type: 'CHECK_STATUS' }, (response) => {
@@ -61,6 +85,9 @@ function Chat() {
                 <p>ai Status</p>
                 <p>prompt {aiStatus.prompt}</p>
                 <p>writer {aiStatus.writer}</p>
+            </div>
+            <div>
+                <button onClick={handleEnableClick}>{enablePrompt ? 'Disable Prompt Chat' : 'Enable Prompt Chat'}</button>
             </div>
             <div>
                 {chatHistory.map((msg, index) => (

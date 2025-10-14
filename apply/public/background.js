@@ -7,36 +7,6 @@ class MessageManager {
     this.requestId = 0;
   }
 
-  // Adding sending logical
-  async sendToBackGround(type, data = null) {
-    try {
-      const response = await new Promise((resolve, reject) => {
-        chrome.runtime.sendMessage(
-          {
-            type,
-            data,
-            requestId: ++this.requestId,
-            timestamp: Date.now(),
-          },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              return reject(new Error(chrome.runtime.lastError.message));
-            }
-            resolve(response);
-          }
-        );
-      });
-
-      if (response && response.error) {
-        throw new Error(response.error);
-      }
-
-      return response;
-    } catch (err) {
-      console.error(`Message error (${type}):`, err);
-      throw err;
-    }
-  }
   addListener(type, handler) {
     // Creating new type list storing handler
     if (!this.listener.has(type)) {
@@ -54,6 +24,7 @@ class MessageManager {
       }
     }
   }
+
   // Receiving message 
   handleMessage(message, sender, sendResponse) {
     const { type, data } = message;
@@ -100,18 +71,9 @@ async function initDefaults() {
 
 initDefaults();
 
-// Function
-async function aiInitStatus() {
-  const promptAvailability = await checkingAvailability("PROMPT");
-  isPromptAvailable = promptAvailability
-  const writerAvailability = await checkingAvailability("WRITER");
-  isWriterAvailable = writerAvailability
-}
 
-aiInitStatus()
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
-  aiInitStatus()
   if (reason === 'install') {
     chrome.sidePanel
       .setPanelBehavior({ openPanelOnActionClick: true })
@@ -120,7 +82,7 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  aiInitStatus()
+  console.log('Extension started');
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -133,67 +95,55 @@ messageManager.addListener('CHAT_WITH_AI', async (data, sender) => {
 });
 
 messageManager.addListener('CHECK_STATUS', async () => {
-  return await getAIStatus();
+  return await checkingAvailability();
 })
 
-messageManager.addListener('RESET_SESSION', async (data) => {
-  const { type } = data;
-  await resetAISession(type);
-  return true;
-});
-
-
-messageManager.addListener('CREATE_WRITER', async () => {
-  await createWriter();
+messageManager.addListener('RESET_SESSION', async () => {
+  await resetAISession();
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'DESTROY_COPILOT_WRITER' }, (response) => {
+        console.log('Content script response:', response);
+      });
+    }
+  });
   return true;
 });
 
 messageManager.addListener('CREATE_PROMPT', async () => {
   createPrompt();
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'INIT_COPILOT_WRITER' }, (response) => {
+        console.log('Content script response:', response);
+      });
+    }
+  });
   return true;
 });
 
+
 messageManager.addListener('COMPLETION_REQUEST', async (data, sender) => {
-    return await handleCompletionRequest(data);
+  return await handleCompletionRequest(data);
 });
 
-async function getAIStatus() {
+
+async function checkingAvailability() {
+  const promptAvailability = await LanguageModel.availability();
+  const writerAvailability = await Writer.availability();
+
   return {
-    prompt: isPromptAvailable,
-    writer: isWriterAvailable,
+    prompt: promptAvailability,
+    writer: writerAvailability
   };
 }
 
-async function checkingAvailability(type) {
-  try {
-    let availability;
-    if (type === 'PROMPT') {
-      availability = await LanguageModel.availability();
-    } else if (type === "WRITER") {
-      availability = await Writer.availability();
-    }
-    return availability;
-  } catch (err) {
-    console.error("Unexpected Error When checking availability", err);
-    return 'unavailable';
-  }
-}
 
-async function resetAISession(type) {
-  switch (type) {
-    case "PROMPT":
-      if (promptSession) {
-        promptSession.destroy();
-      }
-      promptSession = null;
-      break;
-    case "WRITER":
-      if (writerSession) {
-        writerSession.destroy();
-      }
-      writerSession = null;
-      break;
+async function resetAISession() {
+  if (promptSession) {
+    promptSession.destroy();
   }
+  promptSession = null;
 }
 
 async function createPrompt() {
@@ -204,7 +154,7 @@ async function createPrompt() {
     }
   ];
   if (!promptSession) {
-    if (isPromptAvailable === "downloadable") {
+    if (!('LanguageModel' in self)) {
       promptSession = await LanguageModel.create({
         initialPrompts,
         temperature: 0.7,
@@ -251,12 +201,11 @@ async function handleCompletionRequest(data) {
   console.log('Processing completion request for:', prompt);
   // 确保 promptSession 存在
   if (!promptSession) {
-    console.log('Creating new prompt session');
     await createPrompt();
   }
 
   // 构建补全提示
-  const completionPrompt = `Complete the following code or text. Only return the completion part: ${prompt}`;
+  const completionPrompt = `Complete the following text. Only return the completion part: ${prompt}`;
 
   // 使用 Prompt API 获取补全
   const response = await promptSession.prompt(completionPrompt);

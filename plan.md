@@ -4,3 +4,5 @@
 2. prompt 实现信息补全
 3. prompt 聊天
 4. detector +  translator
+
+分离session
