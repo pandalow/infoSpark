@@ -53,10 +53,10 @@ class MessageManager {
 const messageManager = new MessageManager();
 
 // State
-let isPromptAvailable = "unknown"
-let isWriterAvailable = "unknown"
 let promptSession = null;
+let completionSession = null;
 let writerSession = null;
+let rewriterSession = null;
 let defaults = null;
 
 async function initDefaults() {
@@ -70,8 +70,6 @@ async function initDefaults() {
 }
 
 initDefaults();
-
-
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === 'install') {
@@ -100,7 +98,7 @@ messageManager.addListener('CHECK_STATUS', async () => {
 
 messageManager.addListener('RESET_SESSION', async () => {
   await resetAISession();
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
       chrome.tabs.sendMessage(tabs[0].id, { type: 'DESTROY_COPILOT_WRITER' }, (response) => {
         console.log('Content script response:', response);
@@ -110,8 +108,8 @@ messageManager.addListener('RESET_SESSION', async () => {
   return true;
 });
 
-messageManager.addListener('CREATE_PROMPT', async () => {
-  createPrompt();
+messageManager.addListener('CREATE_COMPLETION_SESSION', async () => {
+  createCompletionSession();
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
       chrome.tabs.sendMessage(tabs[0].id, { type: 'INIT_COPILOT_WRITER' }, (response) => {
@@ -121,7 +119,6 @@ messageManager.addListener('CREATE_PROMPT', async () => {
   });
   return true;
 });
-
 
 messageManager.addListener('COMPLETION_REQUEST', async (data, sender) => {
   return await handleCompletionRequest(data);
@@ -138,13 +135,6 @@ async function checkingAvailability() {
   };
 }
 
-
-async function resetAISession() {
-  if (promptSession) {
-    promptSession.destroy();
-  }
-  promptSession = null;
-}
 
 async function createPrompt() {
   const initialPrompts = [
@@ -176,6 +166,44 @@ async function createPrompt() {
   }
 }
 
+async function createCompletionSession() {
+  const initialPrompts = [
+    {
+      role: 'system',
+      content: "You are a writer assistant, Please help to complete user's text. Only return the completion part."
+    }
+  ];
+  if (!completionSession) {
+    if (!('LanguageModel' in self)) {
+      completionSession = await LanguageModel.create({
+        initialPrompts,
+        temperature: 0.7,
+        topK: 3,
+        monitor(m) {
+          m.addEventListener('downloadprogress', (e) => {
+            console.log(`Downloaded ${e.loaded * 100}%`);
+          });
+        },
+      });
+    } else {
+      const params = {
+        initialPrompts,
+        temperature: 0.7,
+        topK: 3
+      };
+      completionSession = await LanguageModel.create(params);
+    }
+  }
+}
+
+async function resetAISession() {
+  if (completionSession) {
+    completionSession.destroy();
+  }
+  completionSession = null;
+}
+
+
 async function handleAIChat(data) {
   const { message, chatHistory } = data;
   if (!promptSession) {
@@ -199,52 +227,74 @@ async function handleAIChat(data) {
 async function handleCompletionRequest(data) {
   const { prompt } = data;
   console.log('Processing completion request for:', prompt);
-  // 确保 promptSession 存在
-  if (!promptSession) {
-    await createPrompt();
+  // 确保 completionSession 存在
+  if (!completionSession) {
+    await createCompletionSession();
   }
 
   // 构建补全提示
   const completionPrompt = `Complete the following text. Only return the completion part: ${prompt}`;
 
   // 使用 Prompt API 获取补全
-  const response = await promptSession.prompt(completionPrompt);
+  const response = await completionSession.prompt(completionPrompt);
   console.log('Received completion response:', response);
 
   return { completion: response.trim() };
 }
 
 
-// Port Manager
-chrome.runtime.onConnect.addListener(async (port) => {
-  if (port.name === "AI_WRITER_STREAM") {
-    console.log('Writer stream connected');
-
-    port.onMessage.addListener(async (message) => {
-      if (message.type === "START_STREAM") {
-        const { prompt } = message.data;
-
-        try {
-          // 创建 Writer 实例
-          if (!promptSession) {
-            promptSession = await createPrompt();
-          }
-          const inquiry = "FIll in the following text:"
-          // 开始流式补全
-          const response = promptSession.prompt(`${inquiry}\n${prompt}`);
-
-          port.postMessage({ type: "STREAM_START", data: { response } });
-          // 发送流式输出结束的消息
-          port.postMessage({ type: "STREAM_END" });
-        } catch (error) {
-          console.error('Writer stream error:', error);
-          port.postMessage({ type: "STREAM_ERROR", error: error.message });
-        }
-      }
-    });
-
-    port.onDisconnect.addListener(() => {
-      console.log("Writer stream disconnected");
-    });
+// Writer
+async function createWriterSession() {
+  const options = {
+    tone: 'casual',
+    length: 'Medium',
+    format: 'plain-text',
+    sharedContext: '',
+  };
+  if (!writerSession) {
+    writerSession = await Writer.create(options)
   }
+}
+async function createRewriterSession() {
+  const options = {
+    tone: 'casual',
+    length: 'Medium',
+    format: 'plain-text',
+    sharedContext: '',
+  };
+  if (!rewriterSession) {
+    rewriterSession = await Rewriter.create(options)
+  }
+const port = chrome.runtime.connect({ name: "AI_WRITER_STREAM" });
+
+chrome.runtime.onConnect.addListener((port) => {
+
+  port.onMessage.addListener(async (message) => {
+    if (message.type === "WRITER_STREAM") {
+      const { prompt } = message.data;
+      if (!writerSession) {
+        writerSession = await createWriterSession();
+      }
+      const stream = writerSession.writeStreaming(prompt, { context: '' });
+      for await (const chunk of stream) {
+        port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+      }
+      port.postMessage({ type: "STREAM_END" });
+    }else if (message.type === "REWRITER_STREAM") {
+      const { prompt } = message.data;
+      if (!rewriterSession) {
+        rewriterSession = await createRewriterSession();
+      }
+      const stream = rewriterSession.rewriteStreaming(prompt, { context: '' });
+      for await (const chunk of stream) {
+        port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+      }
+      port.postMessage({ type: "STREAM_END" });
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    console.log("Writer stream disconnected");
+  });
 });
+}
