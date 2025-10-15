@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { chromeMessaging } from '../chromeMessaging'
-import { useEffect } from 'react'
 
 function Chat() {
     const [message, setMessage] = useState("")
     const [chatHistory, setChatHistory] = useState([])
     const [isLoading, setIsLoading] = useState(false)
-
-
+    
+    
     async function handleChatWithAI() {
         if (!message.trim()) return;
 

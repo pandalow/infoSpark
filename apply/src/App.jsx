@@ -8,7 +8,7 @@ function App() {
 
   return (
     <>
-    <h1>Apply Day</h1>
+    <h1>Info Spark</h1>
     <div><Context/></div>
     <div><Chat/></div>
     </>

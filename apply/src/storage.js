@@ -184,19 +184,6 @@ class MessageManager {
     }
 }
 
-class PortManager {
-
-    constructor() {
-        this.port = new Map();
-        this.requestId = 0;
-    }
-
-
-
-
-}
-
-// Adding Port Manager
 const storageManager = new StorageManager();
 const messageManager = new MessageManager();
 

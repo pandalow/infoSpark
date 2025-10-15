@@ -50,6 +50,15 @@ class MessageManager {
 
 const messageManager = new MessageManager();
 
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === 'install') {
+    chrome.sidePanel
+      .setPanelBehavior({ openPanelOnActionClick: true })
+      .catch((error) => console.error(error));
+  }
+});
+
+
 // State
 const sessions = {
   prompt: null,
@@ -70,14 +79,6 @@ async function initDefaults() {
 }
 
 initDefaults();
-
-chrome.runtime.onInstalled.addListener(({ reason }) => {
-  if (reason === 'install') {
-    chrome.sidePanel
-      .setPanelBehavior({ openPanelOnActionClick: true })
-      .catch((error) => console.error(error));
-  }
-});
 
 chrome.runtime.onStartup.addListener(() => {
   console.log('Extension started');
@@ -127,7 +128,7 @@ messageManager.addListener('COMPLETION_REQUEST', async (data, sender) => {
 });
 
 
-// 核心功能
+// Main Function
 async function checkingAvailability() {
   const promptAvailability = await LanguageModel.availability();
   const writerAvailability = await Writer.availability();

@@ -14,7 +14,7 @@ let port = null;
 function initializePort() {
     if (!port) {
         port = chrome.runtime.connect({ name: "AI_WRITER_STREAM" });
-        
+
         port.onMessage.addListener((msg) => {
             console.log('Port received message:', msg);
             if (copilotWriter) {
@@ -171,7 +171,7 @@ class CopilotWriter {
         // 创建接受补全按钮
         const acceptButton = document.createElement('button');
         acceptButton.id = 'copilot-accept-btn';
-        acceptButton.textContent = '✓ 接受补全';
+        acceptButton.textContent = '✓ Accept';
         acceptButton.style.cssText = `
             flex: 1;
             background: #48bb78;
@@ -187,7 +187,7 @@ class CopilotWriter {
         // 创建补全模式按钮
         const completionButton = document.createElement('button');
         completionButton.id = 'copilot-completion-btn';
-        completionButton.textContent = '🔄 补全模式';
+        completionButton.textContent = 'Completion';
         completionButton.style.cssText = `
             flex: 1;
             background: #48bb78;
@@ -203,7 +203,7 @@ class CopilotWriter {
         // 创建全文重写按钮
         const rewriteButton = document.createElement('button');
         rewriteButton.id = 'copilot-rewrite-btn';
-        rewriteButton.textContent = '📝 全文重写';
+        rewriteButton.textContent = 'ReWrite';
         rewriteButton.style.cssText = `
             flex: 1;
             background: #ed8936;
@@ -219,7 +219,7 @@ class CopilotWriter {
         // 创建Writer按钮
         const writerButton = document.createElement('button');
         writerButton.id = 'copilot-writer-btn';
-        writerButton.textContent = '✍️ Writer';
+        writerButton.textContent = 'Writer';
         writerButton.style.cssText = `
             flex: 1;
             background: #667eea;
@@ -254,6 +254,7 @@ class CopilotWriter {
         // 关闭按钮
         const closeBtn = document.getElementById('copilot-close-btn');
         closeBtn.addEventListener('click', () => {
+            event.stopPropagation();
             this.hideCompletionPanel();
         });
 
@@ -314,18 +315,14 @@ class CopilotWriter {
         if (this.isTextInput(event.target)) {
             this.currentElement = event.target;
             console.log('Focused on text input:', event.target.tagName);
-
         }
+        this.showCompletionPanel('等待补全内容...');
     }
 
     handleFocusOut(event) {
-
-        if (event.target === this.currentElement) {
-            // 不再自动隐藏面板，让用户手动控制
-            // this.hideCompletionPanel();
-            // this.currentElement = null;
-        }
-
+        // if (event.target === this.currentElement) {
+        //     this.currentElement = null;
+        // }
     }
 
     handleKeyDown(event) {
@@ -345,6 +342,7 @@ class CopilotWriter {
             return;
         }
     }
+
     handleInput(event) {
         if (!this.currentElement || event.target !== this.currentElement) {
             return;
@@ -354,18 +352,14 @@ class CopilotWriter {
             clearTimeout(this.debounceTimer);
         }
         if (this.mode === 'completion') {
+            console.log('Input detected, scheduling completion request');
             this.debounceTimer = setTimeout(() => {
                 this.requestCompletion();
-            }, 300);
+            }, 1000); // 1 秒
         }
     }
     handleClick(event) {
         // 点击面板外部隐藏面板
-        if (this.completionPanel.style.display === 'block' &&
-            !this.completionPanel.contains(event.target) &&
-            event.target !== this.currentElement) {
-            this.hideCompletionPanel();
-        }
     }
 
     // 核心功能方法
@@ -472,18 +466,6 @@ class CopilotWriter {
         document.removeEventListener('keydown', this.handleKeyDownBound);
         document.removeEventListener('input', this.handleInputBound);
         document.removeEventListener('click', this.handleClickBound);
-
-        // 移除面板
-        if (this.completionPanel) {
-            this.completionPanel.remove();
-        }
-        this.currentElement = null;
-        this.completionPanel = null;
-        this.currentCompletion = "";
-        this.debounceTimer = null;
-        this.completionCache.clear();
-        this.isRequesting = false;
-        console.log('CopilotWriter destroyed');
     }
 
     // 打开Writer功能
@@ -491,15 +473,15 @@ class CopilotWriter {
         this.mode = 'writer';
         this.currentCompletion = '';
         this.showCompletionPanel('正在生成内容...');
-        
+
         console.log('Sending WRITER_STREAM message, port:', this.port);
-        
+
         if (!this.port) {
             console.error('Port is not initialized');
             this.showCompletionPanel('连接错误，请重试');
             return;
         }
-        
+
         // 发送消息给 background.js，启动 Writer 流式处理
         this.port.postMessage({
             type: 'WRITER_STREAM',
@@ -512,15 +494,15 @@ class CopilotWriter {
         this.mode = 'rewrite';
         this.currentCompletion = '';
         this.showCompletionPanel('正在重写内容...');
-        
+
         console.log('Sending REWRITER_STREAM message, port:', this.port);
-        
+
         if (!this.port) {
             console.error('Port is not initialized');
             this.showCompletionPanel('连接错误，请重试');
             return;
         }
-        
+
         this.port.postMessage({
             type: 'REWRITER_STREAM',
             data: { prompt: this.getTextContext().fullText }

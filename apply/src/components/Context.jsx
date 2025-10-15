@@ -7,7 +7,8 @@ function Context() {
     const isFirstSave = useRef(true);
     const [aiStatus, setAiStatus] = useState({
         prompt: "processing",
-        writer: "processing"
+        writer: "processing",
+        rewriter: "processing"
     })
     const [enablePrompt, setEnablePrompt] = useState(false)
 
@@ -39,7 +40,6 @@ function Context() {
                 if (isFirstSave.current) {
                     return;
                 }
-                // 直接使用 Chrome Storage
                 await chromeMessaging.setStorage('context', context);
             } catch (e) {
                 console.error('saveData error', e);
