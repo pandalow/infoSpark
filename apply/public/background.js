@@ -51,10 +51,12 @@ class MessageManager {
 const messageManager = new MessageManager();
 
 // State
-let promptSession = null;
-let completionSession = null;
-let writerSession = null;
-let rewriterSession = null;
+const sessions = {
+  prompt: null,
+  completion: null,
+  writer: null,
+  rewriter: null,
+};
 let defaults = null;
 
 async function initDefaults() {
@@ -95,7 +97,7 @@ messageManager.addListener('CHECK_STATUS', async () => {
 })
 
 messageManager.addListener('RESET_SESSION', async () => {
-  await resetAISession();
+  resetAllSessions();
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
       chrome.tabs.sendMessage(tabs[0].id, { type: 'DESTROY_COPILOT_WRITER' }, (response) => {
@@ -123,6 +125,7 @@ messageManager.addListener('COMPLETION_REQUEST', async (data, sender) => {
 });
 
 
+// 核心功能
 async function checkingAvailability() {
   const promptAvailability = await LanguageModel.availability();
   const writerAvailability = await Writer.availability();
@@ -133,78 +136,92 @@ async function checkingAvailability() {
   };
 }
 
-
-async function createPrompt() {
-  const initialPrompts = [
-    {
-      role: 'system',
-      content: 'You are a helpful and friendly job hunting assistant. Provide clear, concise responses.'
-    }
-  ];
-  if (!promptSession) {
-    if (!('LanguageModel' in self)) {
-      promptSession = await LanguageModel.create({
-        initialPrompts,
-        temperature: 0.7,
-        topK: 3,
-        monitor(m) {
-          m.addEventListener('downloadprogress', (e) => {
-            console.log(`Downloaded ${e.loaded * 100}%`);
-          });
-        },
-      });
-    } else {
-      const params = {
-        initialPrompts,
-        temperature: 0.7,
-        topK: 3
-      };
-      promptSession = await LanguageModel.create(params);
+function destroySessions(exceptKey) {
+  for (const key in sessions) {
+    if (key !== exceptKey && sessions[key]) {
+      sessions[key].destroy();
+      sessions[key] = null;
     }
   }
 }
+function resetAllSessions() {
+  destroySessions('prompt');
+}
+
+async function createSession(type, createFn) {
+  destroySessions('prompt');
+  if (!sessions[type]) {
+    sessions[type] = await createFn();
+  }
+  return sessions[type];
+}
+
+async function createPromptSession() {
+  return await createSession('prompt', async () => {
+    const initialPrompts = [
+      { role: 'system', content: 'You are a helpful and friendly job hunting assistant. Provide clear, concise responses.' }
+    ];
+    return await LanguageModel.create({
+      initialPrompts,
+      temperature: 0.7,
+      topK: 3,
+      monitor(m) {
+        m.addEventListener('downloadprogress', (e) => {
+          console.log(`Downloaded ${e.loaded * 100}%`);
+        });
+      },
+    });
+  });
+}
+
 
 async function createCompletionSession() {
-  const initialPrompts = [
-    {
-      role: 'system',
-      content: "You are a writer assistant, Please help to complete user's text. Only return the completion part."
-    }
-  ];
-  if (!completionSession) {
-    if (!('LanguageModel' in self)) {
-      completionSession = await LanguageModel.create({
-        initialPrompts,
-        temperature: 0.7,
-        topK: 3,
-        monitor(m) {
-          m.addEventListener('downloadprogress', (e) => {
-            console.log(`Downloaded ${e.loaded * 100}%`);
-          });
-        },
-      });
-    } else {
-      const params = {
-        initialPrompts,
-        temperature: 0.7,
-        topK: 3
-      };
-      completionSession = await LanguageModel.create(params);
-    }
-  }
+  return await createSession('completion', async () => {
+    const initialPrompts = [
+      {
+        role: 'system', content: "You are a writer assistant, Please help to complete user's text. Only return the completion part."
+      }
+    ];
+    return await LanguageModel.create({
+      initialPrompts,
+      temperature: 0.7,
+      topK: 3,
+      monitor(m) {
+        m.addEventListener('downloadprogress', (e) => {
+          console.log(`Downloaded ${e.loaded * 100}%`);
+        });
+      },
+    });
+  });
 }
 
-async function resetAISession() {
-  if (completionSession) {
-    completionSession.destroy();
-  }
-  completionSession = null;
+async function createWriterSession() {
+  return await createSession('writer', async () => {
+    const options = {
+      tone: 'casual',
+      length: 'medium',
+      format: 'plain-text',
+      sharedContext: '',
+    };
+    return await Writer.create(options);
+  });
 }
 
+async function createRewriterSession() {
+  return await createSession('rewriter', async () => {
+    const options = {
+      tone: 'casual',
+      length: 'medium',
+      format: 'plain-text',
+      sharedContext: '',
+    };
+    return await Rewriter.create(options);
+  });
+}
 
 async function handleAIChat(data) {
   const { message, chatHistory } = data;
-  if (!promptSession) {
+  if (!sessions.prompt) {
     createPrompt()
   }
   let fullPrompt = message;
@@ -215,7 +232,7 @@ async function handleAIChat(data) {
     fullPrompt = `${historyText}\nUser: ${message}`;
   }
 
-  const response = await promptSession.prompt(fullPrompt);
+  const response = await sessions.prompt.prompt(fullPrompt);
   return {
     response: response.trim(),
     timestamp: Date.now()
@@ -226,7 +243,7 @@ async function handleCompletionRequest(data) {
   const { prompt } = data;
   console.log('Processing completion request for:', prompt);
   // 确保 completionSession 存在
-  if (!completionSession) {
+  if (!sessions.completion) {
     await createCompletionSession();
   }
 
@@ -234,37 +251,13 @@ async function handleCompletionRequest(data) {
   const completionPrompt = `Complete the following text. Only return the completion part: ${prompt}`;
 
   // 使用 Prompt API 获取补全
-  const response = await completionSession.prompt(completionPrompt);
+  const response = await sessions.completion.prompt(completionPrompt);
   console.log('Received completion response:', response);
-
   return { completion: response.trim() };
 }
 
 
 // Writer
-async function createWriterSession() {
-  const options = {
-    tone: 'casual',
-    length: 'medium',
-    format: 'plain-text',
-    sharedContext: '',
-  };
-  if (!writerSession) {
-    writerSession = await Writer.create(options)
-  }
-}
-async function createRewriterSession() {
-  const options = {
-    tone: 'casual',
-    length: 'medium',
-    format: 'plain-text',
-    sharedContext: '',
-  };
-  if (!rewriterSession) {
-    rewriterSession = await Rewriter.create(options)
-  }
-}
-
 chrome.runtime.onConnect.addListener((port) => {
   console.log('New port connection received:', port.name);
   if (port.name === "AI_WRITER_STREAM") {
@@ -275,12 +268,12 @@ chrome.runtime.onConnect.addListener((port) => {
       if (message.type === "WRITER_STREAM") {
         console.log('Processing WRITER_STREAM request');
         const { prompt } = message.data;
-        if (!writerSession) {
+        if (!sessions.writer) {
           console.log('Creating writer session...');
           await createWriterSession();
         }
         console.log('Starting writeStreaming...');
-        const stream = writerSession.writeStreaming(prompt, { context: '' });
+        const stream = sessions.writer.writeStreaming(prompt, { context: '' });
         for await (const chunk of stream) {
           console.log('Sending chunk:', chunk);
           port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
@@ -290,12 +283,12 @@ chrome.runtime.onConnect.addListener((port) => {
       } else if (message.type === "REWRITER_STREAM") {
         console.log('Processing REWRITER_STREAM request');
         const { prompt } = message.data;
-        if (!rewriterSession) {
+        if (!sessions.rewriter) {
           console.log('Creating rewriter session...');
           await createRewriterSession();
         }
         console.log('Starting rewriteStreaming...');
-        const stream = rewriterSession.rewriteStreaming(prompt, { context: '' });
+        const stream = sessions.rewriter.rewriteStreaming(prompt, { context: '' });
         for await (const chunk of stream) {
           console.log('Sending rewrite chunk:', chunk);
           port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
@@ -310,3 +303,4 @@ chrome.runtime.onConnect.addListener((port) => {
     });
   }
 });
+

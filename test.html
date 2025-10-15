@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copilot Web 测试页面</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        
+        h1, h2 {
+            color: #333;
+        }
+        
+        textarea, input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+        
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+        
+        .contenteditable {
+            border: 1px solid #ddd;
+            padding: 12px;
+            min-height: 100px;
+            border-radius: 4px;
+            background: white;
+            font-family: monospace;
+        }
+        
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        
+        .code-example {
+            background: #263238;
+            color: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Copilot Web 自动补全测试</h1>
+    
+    <div class="instructions">
+        <h3>📖 使用说明</h3>
+        <ol>
+            <li>确保已安装 Copilot Web 扩展</li>
+            <li><strong>点击扩展图标打开侧边面板</strong> - 查看AI状态和诊断信息</li>
+            <li>在下面的输入框中输入文本</li>
+            <li>等待灰色的AI建议出现</li>
+            <li>按 <kbd>Tab</kbd> 键接受建议，或按 <kbd>Esc</kbd> 取消</li>
+        </ol>
+        
+        <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin: 12px 0;">
+            <strong>⚠️ 重要提示</strong>: 如果AI显示"不可用"，请点击扩展图标打开侧边面板查看详细的诊断信息和解决方案。
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>📝 文本区域测试</h2>
+        <p>试试在这个文本框中输入代码或文本：</p>
+        <textarea placeholder="在这里输入一些代码或文本，比如：
+function hello() {
+    console.log(
+// 等待AI补全..."></textarea>
+    </div>
+
+    <div class="test-section">
+        <h2>📧 输入框测试</h2>
+        <p>邮件主题：</p>
+        <input type="text" placeholder="输入邮件主题，比如：Re: 关于项目进度的">
+        
+        <p>搜索框：</p>
+        <input type="search" placeholder="搜索内容，比如：如何在JavaScript中">
+    </div>
+
+    <div class="test-section">
+        <h2>✏️ 富文本编辑器测试</h2>
+        <p>可编辑区域：</p>
+        <div class="contenteditable" contenteditable="true">
+在这里输入内容测试 contenteditable 元素的补全功能...
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>🧪 代码示例</h2>
+        <p>试试输入这些代码片段来测试AI补全：</p>
+        
+        <div class="code-example">
+// JavaScript 示例
+function calculateTotal(items) {
+    return items.reduce((sum, item) => 
+
+// React 示例  
+const MyComponent = ({ data }) => {
+    const [state, setState] = useState(
+
+// Python 示例
+def process_data(data):
+    filtered_data = [item for item in data if 
+
+// CSS 示例
+.container {
+    display: flex;
+    justify-content:
+        </div>
+        
+        <textarea placeholder="在这里粘贴上面的代码片段并继续输入..."></textarea>
+    </div>
+
+    <div class="test-section">
+        <h2>🔧 调试信息</h2>
+        <p>如果自动补全不工作，请：</p>
+        <ol>
+            <li>按 F12 打开开发者工具</li>
+            <li>查看 Console 标签页的日志</li>
+            <li>确认扩展已正确加载</li>
+            <li>检查是否有错误信息</li>
+        </ol>
+        
+        <button onclick="testExtension()">测试扩展连接</button>
+        <div id="test-result" style="margin-top: 10px; padding: 10px; border-radius: 4px;"></div>
+    </div>
+
+    <script>
+        function testExtension() {
+            const resultDiv = document.getElementById('test-result');
+            
+            // 检查是否有扩展注入的元素
+            const ghostElement = document.getElementById('copilot-ghost-text');
+            
+            if (ghostElement) {
+                resultDiv.style.background = '#d4edda';
+                resultDiv.style.color = '#155724';
+                resultDiv.innerHTML = '✅ 扩展已正确加载！Ghost text 元素已创建。';
+            } else {
+                resultDiv.style.background = '#f8d7da';
+                resultDiv.style.color = '#721c24';
+                resultDiv.innerHTML = '❌ 扩展可能未正确加载。请检查扩展是否已启用。';
+            }
+            
+            // 输出一些调试信息
+            console.log('Extension test results:');
+            console.log('Ghost element exists:', !!ghostElement);
+            console.log('Document readyState:', document.readyState);
+            console.log('Text inputs found:', document.querySelectorAll('textarea, input[type="text"], input[type="search"], [contenteditable="true"]').length);
+        }
+        
+        // 页面加载后自动测试
+        window.addEventListener('load', () => {
+            setTimeout(testExtension, 1000);
+        });
+    </script>
+</body>
+</html>
