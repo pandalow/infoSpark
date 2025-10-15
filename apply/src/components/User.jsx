@@ -24,7 +24,6 @@ function User() {
     useEffect(() => {
         const load = async () => {
             try {
-                // 直接使用 Chrome Storage
                 const data = await chromeMessaging.getStorage('context');
                 if (typeof data !== 'undefined' && data !== null) {
                     setContext(data);
