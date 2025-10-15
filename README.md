@@ -72,7 +72,7 @@ As a user of code agents, I hope to make this kind of intelligent workflow acces
 2. I learned how to use extensions to interact directly with web pages, enabling real-time communication and dynamic content manipulation.
 
 3. The project came with its share of challenges and moments of self-doubt, but completing it brought a tremendous sense of achievement and growth.
-## What's next for Apply Day
+## What's next 
 
 1. **Explore more efficient session initialization methods** to improve performance and enhance the overall interaction experience.
 2. **Optimize text completion capabilities** — the current implementation struggles with managing long-text outputs, occasionally producing irrelevant or incoherent content.
