@@ -1,5 +1,3 @@
-
-
 class MessageManager {
 
   constructor() {
