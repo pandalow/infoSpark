@@ -31,7 +31,7 @@ function initializePort() {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message?.type === 'INIT_COPILOT_WRITER') {
+    if (message.type === 'INIT_COPILOT_WRITER') {
         if (!copilotWriter) {
             copilotWriter = new CopilotWriter();
             sendResponse({ success: true, message: 'CopilotWriter initialized' });
@@ -39,7 +39,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({ success: false, message: 'Already initialized' });
         }
     }
-    if (message?.type === 'DESTROY_COPILOT_WRITER') {
+    if (message.type === 'DESTROY_COPILOT_WRITER') {
         if (copilotWriter) {
             copilotWriter.destroy();
             copilotWriter = null;

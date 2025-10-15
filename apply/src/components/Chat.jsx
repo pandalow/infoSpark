@@ -6,48 +6,7 @@ function Chat() {
     const [message, setMessage] = useState("")
     const [chatHistory, setChatHistory] = useState([])
     const [isLoading, setIsLoading] = useState(false)
-    const [aiStatus, setAiStatus] = useState({
-        prompt: "processing",
-        writer: "processing"
-    })
-    const [enablePrompt, setEnablePrompt] = useState(false)
 
-    useEffect(() => {
-        
-    }, [])
-
-    async function manageCompletion(type) {
-        try {
-            chrome.runtime.sendMessage({type: type}, (response) => {
-                if (response && response.success) {
-                    getAiStatus()
-                } else {
-                    console.error('Error managing completion:', response.error);
-                }
-            });
-        } catch (error) {
-            console.error('Error managing completion:', error);
-        }
-    }
-
-    function handleEnableClick() {
-        setEnablePrompt(!enablePrompt)
-        if (!enablePrompt) {
-            manageCompletion('CREATE_COMPLETION_SESSION')
-        } else {
-            manageCompletion('RESET_SESSION')
-        }
-    }
-
-    async function getAiStatus() {
-        chrome.runtime.sendMessage({ type: 'CHECK_STATUS' }, (response) => {
-            if (response && response.success) {
-                setAiStatus(response.data)
-            } else {
-                console.error('Error:', response.error);
-            }
-        });
-    }
 
     async function handleChatWithAI() {
         if (!message.trim()) return;
@@ -81,14 +40,6 @@ function Chat() {
 
     return (
         <>
-            <div>
-                <p>ai Status</p>
-                <p>prompt {aiStatus.prompt}</p>
-                <p>writer {aiStatus.writer}</p>
-            </div>
-            <div>
-                <button onClick={handleEnableClick}>{enablePrompt ? 'Disable Prompt Chat' : 'Enable Prompt Chat'}</button>
-            </div>
             <div>
                 {chatHistory.map((msg, index) => (
                     <div key={index}>

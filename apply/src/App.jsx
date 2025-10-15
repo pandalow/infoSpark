@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import './App.css'
-import User from './components/User'
+import Context from './components/Context'
 import Chat from './components/Chat'
 
 function App() {
@@ -9,7 +9,7 @@ function App() {
   return (
     <>
     <h1>Apply Day</h1>
-    <div><User/></div>
+    <div><Context/></div>
     <div><Chat/></div>
     </>
   )

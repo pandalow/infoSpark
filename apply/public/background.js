@@ -96,6 +96,7 @@ messageManager.addListener('CHECK_STATUS', async () => {
   return await checkingAvailability();
 })
 
+
 messageManager.addListener('RESET_SESSION', async () => {
   resetAllSessions();
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -110,6 +111,7 @@ messageManager.addListener('RESET_SESSION', async () => {
 
 messageManager.addListener('CREATE_COMPLETION_SESSION', async () => {
   createCompletionSession();
+  createPromptSession();
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
       chrome.tabs.sendMessage(tabs[0].id, { type: 'INIT_COPILOT_WRITER' }, (response) => {
@@ -129,10 +131,12 @@ messageManager.addListener('COMPLETION_REQUEST', async (data, sender) => {
 async function checkingAvailability() {
   const promptAvailability = await LanguageModel.availability();
   const writerAvailability = await Writer.availability();
+  const rewriterAvailability = await Rewriter.availability();
 
   return {
     prompt: promptAvailability,
-    writer: writerAvailability
+    writer: writerAvailability,
+    rewriter: rewriterAvailability
   };
 }
 
@@ -210,9 +214,9 @@ async function createWriterSession() {
 async function createRewriterSession() {
   return await createSession('rewriter', async () => {
     const options = {
-      tone: 'casual',
-      length: 'medium',
+      tone: 'more-casual',
       format: 'plain-text',
+      length: 'shorter',
       sharedContext: '',
     };
     return await Rewriter.create(options);
@@ -222,7 +226,7 @@ async function createRewriterSession() {
 async function handleAIChat(data) {
   const { message, chatHistory } = data;
   if (!sessions.prompt) {
-    createPrompt()
+    createPromptSession();
   }
   let fullPrompt = message;
   if (chatHistory && chatHistory.length > 0) {
