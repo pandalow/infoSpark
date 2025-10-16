@@ -40,7 +40,7 @@ function Context() {
                 if (isFirstSave.current) {
                     return;
                 }
-                await chromeMessaging.setStorage('context', context);
+                await chromeMessaging.setStorage('prompt_content', context);
             } catch (e) {
                 console.error('saveData error', e);
             }
@@ -51,7 +51,7 @@ function Context() {
     useEffect(() => {
         const load = async () => {
             try {
-                const data = await chromeMessaging.getStorage('context');
+                const data = await chromeMessaging.getStorage('prompt_content');
                 if (typeof data !== 'undefined' && data !== null) {
                     setContext(data);
                 }
@@ -81,7 +81,6 @@ function Context() {
         setIsHide(!isHide)
     }
 
-    console.log(context)
 
     return (
         <>
@@ -91,7 +90,7 @@ function Context() {
                 <p>writer {aiStatus.writer}</p>
             </div>
             <div>
-                <button onClick={handleEnableClick}>{enablePrompt ? 'Disable Prompt Chat' : 'Enable Prompt Chat'}</button>
+                <button onClick={handleEnableClick}>{enablePrompt ? 'Disabled Copilot' : 'Enabled Copilot'}</button>
             </div>
             <button onClick={showInput}>Manage</button>
             {!isHide &&

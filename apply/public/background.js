@@ -59,14 +59,43 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 });
 
 
-// State
+// Session management
 const sessions = {
   prompt: null,
   completion: null,
   writer: null,
   rewriter: null,
 };
+
+// Copilot State management
+let copilotState = {
+  isEnabled: false,
+  activeTabId: null
+};
+
+// Save Copilot state to storage
+async function saveCopilotState() {
+  try {
+    await chrome.storage.local.set({ copilotState });
+  } catch (error) {
+    console.error('Failed to save copilot state:', error);
+  }
+}
+
+// Load Copilot state from storage
+async function loadCopilotState() {
+  try {
+    const result = await chrome.storage.local.get(['copilotState']);
+    if (result.copilotState) {
+      copilotState = { ...copilotState, ...result.copilotState };
+    }
+  } catch (error) {
+    console.error('Failed to load copilot state:', error);
+  }
+}
+
 let defaults = null;
+let isInitialized = false;
 
 async function initDefaults() {
   defaults = await LanguageModel.params();
@@ -74,6 +103,10 @@ async function initDefaults() {
   if (!('LanguageModel' in self)) {
     console.log("Prompt Model not available")
   }
+  // 恢复Copilot状态
+  await loadCopilotState();
+  console.log('Copilot state loaded:', copilotState);
+  isInitialized = true;
   // Pending https://issues.chromium.org/issues/367771112.
   // sliderTemperature.max = defaults.maxTemperature;
 }
@@ -82,6 +115,41 @@ initDefaults();
 
 chrome.runtime.onStartup.addListener(() => {
   console.log('Extension started');
+});
+
+// 监听tab更新（页面刷新、导航等）
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  console.log('Tab updated:', tabId, changeInfo.status, 'copilotEnabled:', copilotState.isEnabled);
+  
+  // 当页面完成加载且Copilot是启用状态时，自动初始化
+  if (changeInfo.status === 'complete' && 
+      copilotState.isEnabled && 
+      tab.url && 
+      !tab.url.startsWith('chrome://') && 
+      !tab.url.startsWith('chrome-extension://')) {
+    
+    console.log('Attempting to auto-init CopilotWriter for tab:', tabId, tab.url);
+    
+    // 延迟一点确保content script已加载
+    setTimeout(() => {
+      chrome.tabs.sendMessage(tabId, { type: 'INIT_COPILOT_WRITER' }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.log('Failed to init copilot on tab:', chrome.runtime.lastError.message);
+        } else {
+          console.log('Auto-initialized CopilotWriter on tab:', tabId, response);
+        }
+      });
+    }, 500);
+  }
+});
+
+// 监听活动tab切换
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  if (copilotState.isEnabled) {
+    // 更新当前活动tab
+    copilotState.activeTabId = activeInfo.tabId;
+    saveCopilotState();
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -100,6 +168,10 @@ messageManager.addListener('CHECK_STATUS', async () => {
 
 messageManager.addListener('RESET_SESSION', async () => {
   resetAllSessions();
+  copilotState.isEnabled = false;
+  copilotState.activeTabId = null;
+  await saveCopilotState();
+  
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
       chrome.tabs.sendMessage(tabs[0].id, { type: 'DESTROY_COPILOT_WRITER' }, (response) => {
@@ -110,11 +182,28 @@ messageManager.addListener('RESET_SESSION', async () => {
   return true;
 });
 
+messageManager.addListener('GET_COPILOT_STATUS', async () => {
+  // 确保状态已经加载
+  if (!isInitialized) {
+    await loadCopilotState();
+    isInitialized = true;
+  }
+  console.log('GET_COPILOT_STATUS requested, current state:', copilotState);
+  return { isEnabled: copilotState.isEnabled };
+});
+
 messageManager.addListener('CREATE_COMPLETION_SESSION', async () => {
   createCompletionSession();
   createPromptSession();
+  
+  // 更新Copilot状态
+  copilotState.isEnabled = true;
+  
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
+      copilotState.activeTabId = tabs[0].id;
+      saveCopilotState(); // 保存状态
+      
       chrome.tabs.sendMessage(tabs[0].id, { type: 'INIT_COPILOT_WRITER' }, (response) => {
         console.log('Content script response:', response);
       });
@@ -123,9 +212,28 @@ messageManager.addListener('CREATE_COMPLETION_SESSION', async () => {
   return true;
 });
 
+messageManager.addListener('ENABLE_COMPLETION', async () => {
+  if (!sessions.completion) {
+    await createCompletionSession();
+  }
+});
+
 messageManager.addListener('COMPLETION_REQUEST', async (data, sender) => {
   return await handleCompletionRequest(data);
 });
+
+// Manage Storage
+async function getStorage(key) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get([key], (result) => {
+      if (chrome.runtime.lastError) {
+        return reject(new Error(chrome.runtime.lastError.message));
+      }
+      resolve(result[key]);
+    });
+  });
+}
+
 
 
 // Main Function
@@ -163,8 +271,13 @@ async function createSession(type, createFn) {
 
 async function createPromptSession() {
   return await createSession('prompt', async () => {
+
+    const content = await getStorage('prompt_content');
     const initialPrompts = [
-      { role: 'system', content: 'You are a helpful and friendly job hunting assistant. Provide clear, concise responses.' }
+      {
+        role: 'system',
+        content: "You're a helpful assistant. Answer the user's questions based on the provided context." + (content !== undefined ? content : "")
+      },
     ];
     return await LanguageModel.create({
       initialPrompts,
@@ -184,7 +297,8 @@ async function createCompletionSession() {
   return await createSession('completion', async () => {
     const initialPrompts = [
       {
-        role: 'system', content: "You are a writer assistant, Please help to complete user's text. Only return the completion part."
+        role: 'system',
+        content: "You are a writer assistant, Please help to complete user's text. Only return the completion part."
       }
     ];
     return await LanguageModel.create({
@@ -266,21 +380,15 @@ async function handleCompletionRequest(data) {
 chrome.runtime.onConnect.addListener((port) => {
   console.log('New port connection received:', port.name);
   if (port.name === "AI_WRITER_STREAM") {
-    console.log('Writer stream connected');
 
     port.onMessage.addListener(async (message) => {
-      console.log('Port received message:', message);
       if (message.type === "WRITER_STREAM") {
-        console.log('Processing WRITER_STREAM request');
         const { prompt } = message.data;
         if (!sessions.writer) {
-          console.log('Creating writer session...');
           await createWriterSession();
         }
-        console.log('Starting writeStreaming...');
         const stream = sessions.writer.writeStreaming(prompt, { context: '' });
         for await (const chunk of stream) {
-          console.log('Sending chunk:', chunk);
           port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
         }
         console.log('Stream completed');
@@ -295,7 +403,6 @@ chrome.runtime.onConnect.addListener((port) => {
         console.log('Starting rewriteStreaming...');
         const stream = sessions.rewriter.rewriteStreaming(prompt, { context: '' });
         for await (const chunk of stream) {
-          console.log('Sending rewrite chunk:', chunk);
           port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
         }
         console.log('Rewrite stream completed');
