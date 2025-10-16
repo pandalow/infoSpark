@@ -136,14 +136,15 @@ class CopilotWriter {
             bottom: 20px;
             right: 20px;
             width: 400px;
-            max-height: 300px;
-            background: #2d3748;
-            border: 1px solid #4a5568;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            max-height: 350px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px 0 rgba(59, 130, 246, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.8);
             z-index: 999999;
-            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-            font-size: 14px;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 13px;
             display: none;
             overflow: hidden;
         `;
@@ -151,34 +152,40 @@ class CopilotWriter {
         // Title bar
         const titleBar = document.createElement('div');
         titleBar.style.cssText = `
-            background: #1a202c;
-            color: #e2e8f0;
-            padding: 8px 12px;
-            font-weight: bold;
-            border-bottom: 1px solid #4a5568;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            padding: 12px 16px;
+            font-weight: 600;
+            border-radius: 16px 16px 0 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            font-size: 14px;
         `;
         titleBar.innerHTML = `
-            <span>InfoSpark Copilot</span>
+            <span>InfoSpark AI Assistant</span>
             <button id="copilot-close-btn" style="
-                background: none;
+                background: rgba(255, 255, 255, 0.2);
                 border: none;
-                color: #e2e8f0;
+                color: white;
                 cursor: pointer;
-                font-size: 16px;
-                padding: 0;
-                width: 20px;
-                height: 20px;
-            ">×</button>
+                font-size: 14px;
+                padding: 4px 8px;
+                width: 24px;
+                height: 24px;
+                border-radius: 6px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: background 0.3s ease;
+            " onmouseover="this.style.background='rgba(255, 255, 255, 0.3)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.2)'">×</button>
         `;
 
         // content area
         const contentArea = document.createElement('div');
         contentArea.style.cssText = `
-            padding: 12px;
-            max-height: 200px;
+            padding: 16px;
+            max-height: 220px;
             overflow-y: auto;
         `;
 
@@ -186,16 +193,17 @@ class CopilotWriter {
         this.completionText = document.createElement('div');
         this.completionText.id = 'copilot-completion-text';
         this.completionText.style.cssText = `
-            color: #e2e8f0;
+            color: #1e40af;
             line-height: 1.5;
             white-space: pre-wrap;
             word-wrap: break-word;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
             min-height: 60px;
-            background: #1a202c;
-            padding: 8px;
-            border-radius: 4px;
-            border: 1px solid #4a5568;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            backdrop-filter: blur(10px);
         `;
         this.completionText.textContent = 'Processing...';
 
@@ -204,24 +212,34 @@ class CopilotWriter {
         buttonContainer.style.cssText = `
             display: flex;
             gap: 8px;
-            margin-top: 8px;
+            margin-top: 12px;
         `;
 
         // Creating the accept button
         const acceptButton = document.createElement('button');
         acceptButton.id = 'copilot-accept-btn';
-        acceptButton.textContent = '✓ Accept';
+        acceptButton.textContent = 'Accept';
         acceptButton.style.cssText = `
             flex: 1;
-            background: #48bb78;
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
             color: white;
             border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
+            padding: 10px 12px;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
         `;
+        acceptButton.addEventListener('mouseover', () => {
+            acceptButton.style.transform = 'translateY(-1px)';
+            acceptButton.style.boxShadow = '0 6px 16px rgba(34, 197, 94, 0.4)';
+        });
+        acceptButton.addEventListener('mouseout', () => {
+            acceptButton.style.transform = 'translateY(0)';
+            acceptButton.style.boxShadow = '0 4px 12px rgba(34, 197, 94, 0.3)';
+        });
 
         // Completion mode button
         const completionButton = document.createElement('button');
@@ -229,31 +247,51 @@ class CopilotWriter {
         completionButton.textContent = 'Completion';
         completionButton.style.cssText = `
             flex: 1;
-            background: #48bb78;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
             color: white;
             border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
+            padding: 10px 12px;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         `;
+        completionButton.addEventListener('mouseover', () => {
+            completionButton.style.transform = 'translateY(-1px)';
+            completionButton.style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.4)';
+        });
+        completionButton.addEventListener('mouseout', () => {
+            completionButton.style.transform = 'translateY(0)';
+            completionButton.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+        });
 
         // 创建全文重写按钮
         const rewriteButton = document.createElement('button');
         rewriteButton.id = 'copilot-rewrite-btn';
-        rewriteButton.textContent = 'ReWrite';
+        rewriteButton.textContent = 'Rewrite';
         rewriteButton.style.cssText = `
             flex: 1;
-            background: #ed8936;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
             color: white;
             border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
+            padding: 10px 12px;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
         `;
+        rewriteButton.addEventListener('mouseover', () => {
+            rewriteButton.style.transform = 'translateY(-1px)';
+            rewriteButton.style.boxShadow = '0 6px 16px rgba(139, 92, 246, 0.4)';
+        });
+        rewriteButton.addEventListener('mouseout', () => {
+            rewriteButton.style.transform = 'translateY(0)';
+            rewriteButton.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
+        });
 
         // 创建Writer按钮
         const writerButton = document.createElement('button');
@@ -261,15 +299,25 @@ class CopilotWriter {
         writerButton.textContent = 'Writer';
         writerButton.style.cssText = `
             flex: 1;
-            background: #667eea;
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
             color: white;
             border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
+            padding: 10px 12px;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
         `;
+        writerButton.addEventListener('mouseover', () => {
+            writerButton.style.transform = 'translateY(-1px)';
+            writerButton.style.boxShadow = '0 6px 16px rgba(245, 158, 11, 0.4)';
+        });
+        writerButton.addEventListener('mouseout', () => {
+            writerButton.style.transform = 'translateY(0)';
+            writerButton.style.boxShadow = '0 4px 12px rgba(245, 158, 11, 0.3)';
+        });
 
         // 组装面板
         buttonContainer.appendChild(acceptButton);

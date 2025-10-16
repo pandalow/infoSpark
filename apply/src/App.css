@@ -64,15 +64,23 @@ body {
 
 /* 现代化Logo */
 .logo-modern {
-  width: 48px;
-  height: 48px;
+  width: 60px;
+  height: 60px;
   background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  /* box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); */
   overflow: hidden;
+}
+
+/* 紧凑版Logo */
+.logo-modern.w-5.h-5 {
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
 }
 
 .logo-modern img {

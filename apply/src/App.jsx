@@ -2,14 +2,13 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import Context from './components/Context'
 import Chat from './components/Chat'
-import { chromeMessaging } from './chromeMessaging'
 
 function App() {
   const [activeTab, setActiveTab] = useState('chat')
   const [aiStatus, setAiStatus] = useState({
-    prompt: "offline",
-    writer: "offline", 
-    rewriter: "offline"
+    prompt: "unavailable",
+    writer: "unavailable", 
+    rewriter: "unavailable"
   })
   const [enablePrompt, setEnablePrompt] = useState(false)
 
@@ -21,18 +20,21 @@ function App() {
     return () => clearInterval(interval)
   }, [])
 
-  async function getAiStatus() {
-    try {
-      chrome.runtime.sendMessage({ type: 'CHECK_STATUS' }, (response) => {
-        if (response && response.success) {
-          setAiStatus(response.data)
-        }
-      })
-    } catch (error) {
-      console.error('Error getting AI status:', error)
-    }
+ async function getAiStatus() {
+  try {
+    chrome.runtime.sendMessage({ type: 'CHECK_STATUS' }, (response) => {
+      if (response && response.success && response.data) {
+        setAiStatus({
+          prompt: response.data.prompt ?? "unavailable",
+          writer: response.data.writer ?? "unavailable",
+          rewriter: response.data.rewriter ?? "unavailable"
+        })
+      }
+    })
+  } catch (error) {
+    console.error('Error getting AI status:', error)
   }
-
+}
   async function manageCompletion(type) {
     try {
       chrome.runtime.sendMessage({ type: type }, (response) => {
@@ -58,18 +60,18 @@ function App() {
 
   const getStatusColor = (status) => {
     switch(status) {
-      case 'ready': return 'text-green-600'
-      case 'processing': return 'text-amber-600'
-      case 'error': return 'text-red-600'
+      case 'available': return 'text-green-600'
+      case 'downloadable': return 'text-amber-600'
+      case 'unavailable': return 'text-red-600'
       default: return 'text-gray-600'
     }
   }
 
   const getStatusText = (status) => {
     switch(status) {
-      case 'ready': return 'Ready'
-      case 'processing': return 'Processing'
-      case 'error': return 'Error'
+      case 'available': return 'Available'
+      case 'downloadable': return 'Downloading...'
+      case 'unavailable': return 'Unavailable'
       default: return 'Offline'
     }
   }
@@ -77,46 +79,43 @@ function App() {
   return (
     <div className="h-screen flex flex-col modern-bg p-3">
       <div className="flex-1 flex flex-col max-w-full">
-        {/* Sidepanel Header */}
-        <header className="mb-4">
-          <div className="glass-card-modern p-4">
-            {/* Logo和标题行 */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="logo-modern">
-                <img src="/logo.png" alt="InfoSpark AI" />
+        {/* Compact Header */}
+        <header className="mb-3">
+          <div className="glass-card-modern p-3">
+            {/* 第一行：Logo + InfoSpark 标题 */}
+            <div className="flex items-center gap-2 mb-2">
+              <div className="logo-modern w-5 h-5">
+                <img src="/logo.png" alt="InfoSpark AI" className="w-full h-full object-contain" />
               </div>
-              <div className="flex-1 min-w-0">
-                <h1 className="text-lg font-bold modern-gradient-text truncate">
-                  InfoSpark AI
-                </h1>
-                <p className="text-slate-600 text-sm">智能创作助手</p>
-              </div>
+              <span className="text-sm font-medium modern-gradient-text animate-pulse">
+                InfoSpark - Your local AI Copilot
+              </span>
             </div>
 
-            {/* AI状态栏和Copilot控制 */}
-            <div className="flex items-center justify-between bg-slate-50/80 backdrop-filter backdrop-blur-sm rounded-lg p-3 border border-blue-200/50">
+            {/* 第二行：状态 + Copilot 控制 */}
+            <div className="flex items-center justify-between bg-slate-50/80 backdrop-filter backdrop-blur-sm rounded-lg p-2 border border-blue-200/50">
               {/* 状态指示器 */}
-              <div className="flex items-center gap-4 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-2.5 h-2.5 rounded-full ${
-                    aiStatus.prompt === 'ready' ? 'bg-green-500' : 
-                    aiStatus.prompt === 'processing' ? 'bg-yellow-500' : 
+              <div className="flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-1">
+                  <div className={`w-2 h-2 rounded-full ${
+                    aiStatus.prompt === 'available' ? 'bg-green-500' : 
+                    aiStatus.prompt === 'downloadable' ? 'bg-yellow-500' : 
                     'bg-gray-400'
                   }`}></div>
                   <span className="text-slate-600 font-medium">Completion</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-2.5 h-2.5 rounded-full ${
-                    aiStatus.writer === 'ready' ? 'bg-green-500' : 
-                    aiStatus.writer === 'processing' ? 'bg-yellow-500' : 
+                <div className="flex items-center gap-1">
+                  <div className={`w-2 h-2 rounded-full ${
+                    aiStatus.writer === 'available' ? 'bg-green-500' : 
+                    aiStatus.writer === 'downloadable' ? 'bg-yellow-500' : 
                     'bg-gray-400'
                   }`}></div>
                   <span className="text-slate-600 font-medium">Writer</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-2.5 h-2.5 rounded-full ${
-                    aiStatus.rewriter === 'ready' ? 'bg-green-500' : 
-                    aiStatus.rewriter === 'processing' ? 'bg-yellow-500' : 
+                <div className="flex items-center gap-1">
+                  <div className={`w-2 h-2 rounded-full ${
+                    aiStatus.rewriter === 'available' ? 'bg-green-500' : 
+                    aiStatus.rewriter === 'downloadable' ? 'bg-yellow-500' : 
                     'bg-gray-400'
                   }`}></div>
                   <span className="text-slate-600 font-medium">Rewriter</span>
@@ -128,7 +127,7 @@ function App() {
                 onClick={handleEnableClick}
                 className={`sidepanel-toggle-btn ${enablePrompt ? 'active' : ''}`}
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <div className={`w-2 h-2 rounded-full ${enablePrompt ? 'bg-green-400' : 'bg-gray-400'}`}></div>
                   <span className="text-xs font-medium">
                     Copilot {enablePrompt ? 'ON' : 'OFF'}
