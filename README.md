@@ -6,7 +6,7 @@
 
 ## 🌟 Project Overview
 
-InfoSpark AI is a local intelligent assistant extension based on Chrome's built-in AI, providing you with private and secure AI text processing capabilities. No API keys required, no internet connection needed - all processing is done locally on your device.
+InfoSpark AI is a Chrome extension that provides advanced text processing capabilities powered by Chrome's built-in AI. It enables features such as context-aware smart conversations, intelligent text completion, and text rewriting optimization. With customizable settings for tone, format, and length, InfoSpark AI adapts to your specific needs. All processing is done locally on your device, ensuring privacy and security without requiring API keys or an internet connection.
 
 ## ✨ Core Features
 
