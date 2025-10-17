@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import Context from './components/Context'
 import Chat from './components/Chat'
+import Guide from './components/Guide'
 
 function App() {
   const [activeTab, setActiveTab] = useState('chat')
+  const [showGuide, setShowGuide] = useState(false)
   const [aiStatus, setAiStatus] = useState({
     prompt: "unavailable",
     writer: "unavailable", 
@@ -77,7 +79,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col modern-bg p-3">
+    <div className="min-h-screen flex flex-col modern-bg p-3">
       <div className="flex-1 flex flex-col max-w-full">
         {/* Compact Header */}
         <header className="mb-3">
@@ -138,6 +140,35 @@ function App() {
           </div>
         </header>
 
+        {/* Guide 展开/收起行 */}
+        <div className="mb-3">
+          <button
+            onClick={() => setShowGuide(!showGuide)}
+            className="w-full guide-toggle-btn flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-slate-700">📚 Quick Guide</span>
+            </div>
+            <svg 
+              className={`w-4 h-4 transition-transform text-slate-600 ${showGuide ? 'rotate-180' : ''}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          {/* Guide 展开内容 */}
+          {showGuide && (
+            <div className="mt-2 modern-fade-in">
+              <div className="glass-card-modern p-3">
+                <Guide />
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Sidepanel导航 */}
         <div className="mb-3">
           <nav className="sidepanel-tab-container">
@@ -151,13 +182,13 @@ function App() {
               onClick={() => setActiveTab('context')}
               className={`sidepanel-tab ${activeTab === 'context' ? 'active' : ''}`}
             >
-              <span className="text-sm font-medium">Settings</span>
+              <span className="text-sm font-medium">Context</span>
             </button>
           </nav>
         </div>
 
         {/* Sidepanel内容区域 */}
-        <main className="glass-card-modern p-4 flex-1 overflow-hidden">
+        <main className="glass-card-modern p-4 flex-1 min-h-0">
           {activeTab === 'chat' && (
             <div className="modern-fade-in h-full">
               <Chat aiStatus={aiStatus} enablePrompt={enablePrompt} />
@@ -165,11 +196,10 @@ function App() {
           )}
           
           {activeTab === 'context' && (
-            <div className="modern-fade-in h-full overflow-y-auto">
+            <div className="modern-fade-in overflow-y-auto">
               <Context 
                 aiStatus={aiStatus} 
                 enablePrompt={enablePrompt}
-                onStatusUpdate={getAiStatus}
               />
             </div>
           )}
