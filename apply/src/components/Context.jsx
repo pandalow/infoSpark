@@ -18,6 +18,7 @@ function Context({ aiStatus, enablePrompt }) {
     const [isHide, setIsHide] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState('writer');
+    const [saveSuccess, setSaveSuccess] = useState(false);
     const isFirstSave = useRef(true);
 
     useEffect(() => {
@@ -53,6 +54,15 @@ function Context({ aiStatus, enablePrompt }) {
         }
     };
 
+    function handleSaveChatContext() {
+        chromeMessaging.setStorage('prompt_content', context);
+        chromeMessaging.sendMessage('UPDATE_CHAT_CONTEXT');
+        
+        // 显示保存成功提示
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000);
+    }
+
     function handleSaveParamsOfWriter() {
         chrome.storage.local.set({
             writerOptions: {
@@ -63,6 +73,10 @@ function Context({ aiStatus, enablePrompt }) {
             }
         });
         chromeMessaging.sendMessage('ENABLE_WRITER');
+        
+        // 显示保存成功提示
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000);
     }
 
     function handleSaveParamsOfRewriter() {
@@ -75,6 +89,10 @@ function Context({ aiStatus, enablePrompt }) {
             }
         });
         chromeMessaging.sendMessage('ENABLE_REWRITER');
+        
+        // 显示保存成功提示
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000);
     }
 
     return (
@@ -83,61 +101,45 @@ function Context({ aiStatus, enablePrompt }) {
             <div className="glass-card-dark p-4">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-slate-800">Chat Context</h3>
-                    <button
-                        onClick={() => setIsHide(!isHide)}
-                        className="btn-modern btn-ghost text-sm px-3 py-1"
-                    >
-                        {isHide ? 'Configure' : 'Hide'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {saveSuccess && (
+                            <span className="text-xs text-green-600">✅ Saved!</span>
+                        )}
+                        <button
+                            onClick={() => handleSaveChatContext()}
+                            className="btn-modern btn-primary text-sm px-3 py-1"
+                        >
+                          Save
+                        </button>
+                    </div>
                 </div>
-
-                {!isHide && (
-                    <div className="space-y-3 modern-fade-in">
-                        <textarea
-                            value={context}
-                            onChange={handleChange}
-                            placeholder="Define the AI's role and behavior..."
-                            className="input-modern h-32 resize-none"
-                        />
-                        <div className="flex justify-between items-center text-sm">
-                            <div className="flex items-center gap-2 text-slate-600">
-                                <span>Tips: Detailed context helps AI understand better</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {isSaving && (
-                                    <div className="flex items-center gap-1 text-green-600">
-                                        <div className="loading-dots">
-                                            <div></div>
-                                            <div></div>
-                                            <div></div>
-                                        </div>
-                                        <span className="text-xs">Saving...</span>
+                <div className="space-y-3 modern-fade-in">
+                    <textarea
+                        value={context}
+                        onChange={handleChange}
+                        placeholder="Define the AI's role and behavior..."
+                        className="input-modern h-32 resize-none"
+                    />
+                    <div className="flex justify-between items-center text-sm">
+                        <div className="flex items-center gap-2 text-slate-600">
+                            <span>Tips: Detailed context helps AI understand better</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {isSaving && (
+                                <div className="flex items-center gap-1 text-green-600">
+                                    <div className="loading-dots">
+                                        <div></div>
+                                        <div></div>
+                                        <div></div>
                                     </div>
-                                )}
-                                <span className="text-slate-500">{context.length} characters</span>
-                            </div>
+                                    <span className="text-xs">Saving...</span>
+                                </div>
+                            )}
+                            <span className="text-slate-500">{context.length} characters</span>
                         </div>
                     </div>
-                )}
-            </div>
-
-            {/* Usage Guide */}
-            <div className="glass-card-dark p-4">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">Usage Guide</h3>
-                <div className="space-y-4 text-sm">
-                    <div className="border-l-4 border-blue-400 pl-3">
-                        <div className="text-blue-600 font-medium mb-1">Smart Chat</div>
-                        <p className="text-slate-600">Engage with AI for professional advice</p>
-                    </div>
-                    <div className="border-l-4 border-green-400 pl-3">
-                        <div className="text-green-600 font-medium mb-1">Web Writing</div>
-                        <p className="text-slate-600">Auto-completion in text fields</p>
-                    </div>
-                    <div className="border-l-4 border-purple-400 pl-3">
-                        <div className="text-purple-600 font-medium mb-1">Content Optimization</div>
-                        <p className="text-slate-600">One-click content improvement</p>
-                    </div>
                 </div>
+
             </div>
 
             {/* Writer and Rewriter Context Settings */}
@@ -148,21 +150,19 @@ function Context({ aiStatus, enablePrompt }) {
                     <div className="flex bg-slate-100 rounded-lg p-1">
                         <button
                             onClick={() => setActiveSettingsTab('writer')}
-                            className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${
-                                activeSettingsTab === 'writer'
+                            className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${activeSettingsTab === 'writer'
                                     ? 'bg-white text-blue-600 shadow-sm'
                                     : 'text-slate-600 hover:text-slate-800'
-                            }`}
+                                }`}
                         >
                             Writer
                         </button>
                         <button
                             onClick={() => setActiveSettingsTab('rewriter')}
-                            className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${
-                                activeSettingsTab === 'rewriter'
+                            className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${activeSettingsTab === 'rewriter'
                                     ? 'bg-white text-blue-600 shadow-sm'
                                     : 'text-slate-600 hover:text-slate-800'
-                            }`}
+                                }`}
                         >
                             Rewriter
                         </button>
@@ -214,12 +214,17 @@ function Context({ aiStatus, enablePrompt }) {
                             ></textarea>
                         </div>
 
-                        <div className="mt-6 flex justify-end">
+                        <div className="mt-6 flex justify-end gap-3">
+                            {saveSuccess && (
+                                <div className="flex items-center gap-1 text-green-600">
+                                    <span className="text-sm">✅ Saved successfully!</span>
+                                </div>
+                            )}
                             <button
                                 className="btn-modern btn-primary"
                                 onClick={handleSaveParamsOfWriter}
                             >
-                                Save Writer Settings
+                                Save
                             </button>
                         </div>
                     </div>
@@ -271,12 +276,17 @@ function Context({ aiStatus, enablePrompt }) {
                             ></textarea>
                         </div>
 
-                        <div className="mt-6 flex justify-end">
+                        <div className="mt-6 flex justify-end gap-3">
+                            {saveSuccess && (
+                                <div className="flex items-center gap-1 text-green-600">
+                                    <span className="text-sm">✅ Saved successfully!</span>
+                                </div>
+                            )}
                             <button
                                 className="btn-modern btn-primary"
                                 onClick={handleSaveParamsOfRewriter}
                             >
-                                Save Rewriter Settings
+                                Save
                             </button>
                         </div>
                     </div>

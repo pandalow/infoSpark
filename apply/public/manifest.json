@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Copilot Web - AI Text Completion",
+  "name": "Your Local AI Assistant",
   "version": "1.0.0",
   "description": "AI-powered text completion and chat assistant for web text editors with Chrome's built-in AI",
   "minimum_chrome_version": "138",
@@ -27,6 +27,6 @@
     "default_path": "index.html"
   },
   "icons": {
-    "16": "vite.svg"
+    "16": "logo.png"
   }
 }

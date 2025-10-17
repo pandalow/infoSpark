@@ -1,81 +1,196 @@
-## Inspiration
-This application was born out of my own job-hunting experience. During the process, I often needed to provide customized information for various applications, yet I found myself lacking an efficient tool to streamline and optimize that task.
+# InfoSpark AI - Your Local AI Assistant
 
-As a user of code agents, I hope to make this kind of intelligent workflow accessible to a wider audience. I believe it represents a great opportunity to help people tackle text-generation and writing tasks more effectively.
+[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?style=flat-square&logo=google-chrome&logoColor=white)](https://chrome.google.com/webstore)
+[![Built with React](https://img.shields.io/badge/Built%20with-React-61DAFB?style=flat-square&logo=react&logoColor=black)](https://reactjs.org/)
+[![Local AI](https://img.shields.io/badge/Powered%20by-Chrome%20Built--in%20AI-FF6B6B?style=flat-square)](https://developer.chrome.com/docs/ai/)
 
-## What it does
+## 🌟 Project Overview
 
-1. **Chatbot** – An interactive module that enables multi-turn conversations with a prompt-based AI. It supports customized context input and management, allowing users to define or modify the conversational background for more personalized responses.
+InfoSpark AI is a local intelligent assistant extension based on Chrome's built-in AI, providing you with private and secure AI text processing capabilities. No API keys required, no internet connection needed - all processing is done locally on your device.
 
-2. **Copilot** – A contextual writing assistant that activates whenever you interact with an input field or text area on a webpage. The Copilot panel provides intelligent text assistance, allowing you to:
+## ✨ Core Features
 
-   * **Auto-complete** your current text based on context.
-   * **Rewrite** or refine your existing input for better clarity, tone, or style.
-   * **Generate** context-aware streaming outputs for specific scenarios (e.g., job applications, emails, summaries) based on your current text as a prompt.
+### 💬 Smart Conversation
+- **Context-Aware Chat**: AI understands current webpage content and provides relevant suggestions
+- **Conversation Memory**: Maintains conversation continuity with multi-turn deep interactions
+- **Personalized Settings**: Customize AI personality and behavior styles
+- **Real-time Response**: Based on local AI models for fast, lag-free responses
 
-3. **Interaction Design** – The Copilot continuously monitors user focus events (`focusin` and `focusout`) to ensure smooth activation and deactivation.
+### ✍️ Intelligent Writing
+- **Universal Text Completion**: Get AI text completion in any webpage input field
+- **Multiple Writing Styles**:
+  - 🎨 **Tone Control**: Casual, formal, neutral
+  - 📏 **Length Control**: Short, medium, long formats
+  - 📄 **Format Support**: Plain text, Markdown format
+- **Context Sharing**: Provide additional background information for specific scenarios
+- **Real-time Suggestions**: Auto-display AI suggestions while typing, press Tab to accept
 
-   * Pressing **TAB** is not supported for auto-filling complete text.
-   * Pressing **ESC** cancels the current suggestion or input operation.
+### 🔧 Text Optimization
+- **Smart Rewriting**: One-click improvement of existing text expression
+- **Style Adjustment**:
+  - 🗣️ **Tone Conversion**: More casual, as-is, more formal
+  - 📝 **Format Conversion**: Support multiple text format conversions
+  - 📊 **Length Adjustment**: Shorter, maintain, longer text length
+- **Batch Processing**: Support segmented optimization of long texts
 
-## How we built it
+### ⚙️ Smart Configuration
+- **Dual Settings System**:
+  - 📝 Writer Settings: Control text generation behavior
+  - 🔄 Rewriter Settings: Control text rewriting style
+- **Template Switching**: Independent configuration tabs for Writer and Rewriter
+- **Real-time Saving**: Configuration changes auto-save and take effect immediately
+- **Reset Function**: One-click restore to default settings
 
-1. **Popup Interface**
-   The frontend popup page is built with **React** and consists of two main components:
+## 🎨 User Interface
 
-   * **User Component** – manages the contextual data and user-defined inputs.
-   * **Chat Component** – handles multi-turn conversations with the AI model.
+### Modern Design
+- **Glass Morphism**: Modern UI design with frosted glass effects
+- **Gradient Animations**: Smooth color gradients and transition animations
+- **Compact Layout**: Compact interface optimized for Chrome sidebar
+- **Status Indicators**: Clear AI status and operation feedback
 
-2. **Background Service**
-   The `background.js` file serves as the **core service layer**. It manages all model sessions, including initialization, message handling, and termination of active sessions.
+### Interactive Experience
+- **Three Main Modules**:
+  - 💬 Chat - Smart conversation
+  - ⚙️ Context - Configuration management
+  - 📚 Guide - Usage instructions
+- **Expandable Guide**: One-click view of feature descriptions without permanent space occupation
+- **Instant Feedback**: Clear prompts for save success, status changes, and other operations
 
-3. **Content Script**
-   The `content.js` file is the **core interaction layer** between the extension and the webpage.
-   It includes a `Copilot` class responsible for detecting and interacting with DOM elements, managing focus events, and triggering AI-assisted writing actions.
+## 🚀 Getting Started
 
-4. **Communication Design**
-   To enable communication across the three layers (popup, background, and content), the following mechanisms are used:
+### System Requirements
+- Chrome Browser 138+ version
+- Device supporting Chrome built-in AI functionality
 
-   * **`chrome.message`** – handles prompt-related communication, including text completions and multi-turn conversations.
+### Installation Steps
+1. Download the extension source code
+2. Open Chrome extensions management page (`chrome://extensions/`)
+3. Enable "Developer mode"
+4. Click "Load unpacked"
+5. Select the project's `apply/dist` folder
 
-     * We encapsulated this logic in a `MessageManager` class, which simplifies message listening and dispatching with an API-like design.
-   * **Persistent `port` connections** – manage communication for **writer** and **rewriter** modules, as these require **streaming outputs**.
+### Quick Start
+1. **Activate Copilot**: Click the extension icon and enable Copilot function in the sidebar
+2. **Configure Context**: Set AI role and behavior in the Context tab
+3. **Start Conversation**: Chat with AI in the Chat tab
+4. **Web Writing**: Experience AI completion in any webpage text box
 
-5. **Built-in AI Sessions**
+## 📋 Feature Details
 
-   * The **prompt module** runs two separate sessions: one for user dialogue and another dedicated to text completion.
-   * Both the **writer** and **rewriter** components use **streaming generation**, producing long-form text outputs based on contextual prompts and user inputs.
+### Chat Function
+```
+Features:
+- Context-based conversation using current page content
+- Support for 8-round conversation history memory
+- Custom AI role settings
+- Real-time typing response
+```
 
-## Challenges we ran into
+### Writer Function
+```
+Configuration Options:
+- tone: casual | formal | neutral
+- length: short | medium | long  
+- format: plain-text | markdown
+- sharedContext: Custom background information
+```
 
-1. **Session Management Challenges**
-   Managing multiple model sessions turned out to be a major challenge. Because the models run locally, maintaining multiple active sessions can quickly consume significant system resources.
+### Rewriter Function
+```
+Configuration Options:
+- tone: more-casual | as-is | more-formal
+- format: plain-text | markdown | as-is
+- length: shorter | as-is | longer
+- sharedContext: Custom rewriting guidance
+```
 
-   * **Solution:** Except for the session used for multi-turn conversations (which we persist by default), all other sessions are instantiated only when needed. When switching modes, we immediately terminate the previous session to free up resources.
+## 🔒 Privacy & Security
 
-2. **Session Startup Latency**
-   Another issue is that starting a new model session takes noticeable time. Since sessions are frequently killed and relaunched during mode switches, this sometimes leads to a less smooth user experience.
+- **Fully Local**: All AI processing is performed on your device
+- **No Data Upload**: Never sends your data to any external servers
+- **Offline Operation**: AI functionality works without internet connection
+- **Data Encryption**: Locally stored configuration data is encrypted
 
-3. **Asynchronous Initialization Delay**
-   Due to the asynchronous nature of model initialization, some interactions may occur before the model is fully ready — resulting in empty or unhandled responses during the initial phase.
+## 🛠️ Technical Architecture
 
-## Accomplishments that we're proud of
-1. We successfully implemented a practically useful Copilot system, greatly thanks to the built-in AI models, which allowed us to deliver real-life assistance in a simple and completely free way.
+### Frontend Technology
+- **React 18**: Modern user interface framework
+- **Tailwind CSS**: Utility-first CSS framework
+- **Vite**: Fast build tool and development server
 
-2. We built a relatively complete and modular application framework, following a script → background → frontend architecture. Each component operates independently, minimizing cross-dependencies and coupling between modules.
+### Chrome Extension
+- **Manifest V3**: Latest Chrome extension standard
+- **Service Worker**: Background script processing
+- **Content Scripts**: Webpage content interaction
+- **Chrome AI API**: Built-in AI model invocation
 
-3. Our session management also performed reasonably well, effectively preventing service lag or freezing even when multiple sessions were active.
+### AI Model Integration
+- **LanguageModel API**: Conversation and text generation
+- **Writer API**: Intelligent writing assistance
+- **Rewriter API**: Text rewriting optimization
 
-## What we learned
-1. I gained a solid understanding of the core features of Chrome extensions, including message handling mechanisms and port-based communication management.
+## 📖 Use Cases
 
-2. I learned how to use extensions to interact directly with web pages, enabling real-time communication and dynamic content manipulation.
+### Daily Writing
+- **Email Composition**: Get writing suggestions in Gmail and other email platforms
+- **Social Media**: Optimize post content on Twitter, LinkedIn, and other platforms
+- **Document Editing**: Improve writing efficiency in Google Docs, Notion, and other platforms
 
-3. The project came with its share of challenges and moments of self-doubt, but completing it brought a tremendous sense of achievement and growth.
-## What's next 
+### Professional Work
+- **Code Comments**: Provide comment suggestions for GitHub and other code platforms
+- **Technical Documentation**: Improve expression in Wiki and documentation websites
+- **Customer Service**: Quickly generate professional replies in CRM systems
 
-1. **Explore more efficient session initialization methods** to improve performance and enhance the overall interaction experience.
-2. **Optimize text completion capabilities** — the current implementation struggles with managing long-text outputs, occasionally producing irrelevant or incoherent content.
-3. **Research advanced similarity computation techniques** similar to those used in real Copilot systems, aiming to achieve more contextually relevant completions.
-4. **Improve caching mechanisms** to enhance generation smoothness and ensure a more seamless user experience.
+### Learning & Research
+- **Academic Writing**: Optimize paper expression on academic platforms
+- **Note Organization**: Improve content organization in note-taking applications
+- **Language Learning**: Get expression suggestions on language learning websites
 
+## 🔄 Changelog
+
+### v1.0.0 (Current Version)
+- ✅ Basic conversation functionality
+- ✅ Smart text completion
+- ✅ Text rewriting optimization
+- ✅ Modern UI design
+- ✅ Configuration management system
+- ✅ Integrated usage guide
+
+## 🤝 Contributing
+
+We welcome community contributions! Please follow these steps:
+
+1. Fork the project repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Create a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
+
+## 🌐 Related Links
+
+- [Chrome AI Documentation](https://developer.chrome.com/docs/ai/)
+- [Chrome Extension Development Guide](https://developer.chrome.com/docs/extensions/)
+- [React Official Documentation](https://reactjs.org/)
+
+## 💡 FAQ
+
+### Q: Why do I need Chrome 138+ version?
+A: Chrome's built-in AI functionality is supported starting from version 138, which is a prerequisite for using this extension.
+
+### Q: Does the AI functionality require an internet connection?
+A: No. All AI processing is completed on your local device and works completely offline.
+
+### Q: How can I customize AI behavior?
+A: In the Context tab, you can set various parameters such as AI role, tone, response length, and more.
+
+### Q: Does the extension collect my data?
+A: No. All data is stored locally on your device and is never uploaded to any external servers.
+
+---
+
+**Let AI empower every creation!** 🚀

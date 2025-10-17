@@ -161,16 +161,25 @@ messageManager.addListener('CHAT_WITH_AI', async (data, sender) => {
   return await handleAIChat(data);
 });
 
+messageManager.addListener('UPDATE_CHAT_CONTEXT', async () => {
+  // 清除现有的 prompt session
+  if (sessions.prompt) {
+    sessions.prompt.destroy();
+    sessions.prompt = null;
+  }
+  await createPromptSession();
+  return true;
+});
 messageManager.addListener('CHECK_STATUS', async () => {
   return await checkingAvailability();
 })
 
 messageManager.addListener('ENABLE_WRITER', async () => {
-    await createWriterSession();
+  await createWriterSession();
 });
 
 messageManager.addListener('ENABLE_REWRITER', async () => {
-    await createRewriterSession();
+  await createRewriterSession();
 });
 
 messageManager.addListener('RESET_SESSION', async () => {
@@ -264,6 +273,7 @@ function destroySessions(exceptKey) {
     }
   }
 }
+
 function resetAllSessions() {
   destroySessions('prompt');
 }
@@ -277,6 +287,11 @@ async function createSession(type, createFn) {
 }
 
 async function createPromptSession() {
+
+  chrome.storage.local.remove(['pageTextSnapshot']).catch((error) => {
+    console.error('Failed to remove pageTextSnapshot from storage:', error);
+  });
+
   return await createSession('prompt', async () => {
 
     const content = await getStorage('prompt_content');
