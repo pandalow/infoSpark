@@ -151,7 +151,7 @@ function App() {
               onClick={() => setActiveTab('context')}
               className={`sidepanel-tab ${activeTab === 'context' ? 'active' : ''}`}
             >
-              <span className="text-sm font-medium">Settings</span>
+              <span className="text-sm font-medium">Context</span>
             </button>
           </nav>
         </div>
@@ -169,7 +169,6 @@ function App() {
               <Context 
                 aiStatus={aiStatus} 
                 enablePrompt={enablePrompt}
-                onStatusUpdate={getAiStatus}
               />
             </div>
           )}

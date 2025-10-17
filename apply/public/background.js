@@ -120,16 +120,16 @@ chrome.runtime.onStartup.addListener(() => {
 // 监听tab更新（页面刷新、导航等）
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   console.log('Tab updated:', tabId, changeInfo.status, 'copilotEnabled:', copilotState.isEnabled);
-  
+
   // 当页面完成加载且Copilot是启用状态时，自动初始化
-  if (changeInfo.status === 'complete' && 
-      copilotState.isEnabled && 
-      tab.url && 
-      !tab.url.startsWith('chrome://') && 
-      !tab.url.startsWith('chrome-extension://')) {
-    
+  if (changeInfo.status === 'complete' &&
+    copilotState.isEnabled &&
+    tab.url &&
+    !tab.url.startsWith('chrome://') &&
+    !tab.url.startsWith('chrome-extension://')) {
+
     console.log('Attempting to auto-init CopilotWriter for tab:', tabId, tab.url);
-    
+
     // 延迟一点确保content script已加载
     setTimeout(() => {
       chrome.tabs.sendMessage(tabId, { type: 'INIT_COPILOT_WRITER' }, (response) => {
@@ -165,13 +165,20 @@ messageManager.addListener('CHECK_STATUS', async () => {
   return await checkingAvailability();
 })
 
+messageManager.addListener('ENABLE_WRITER', async () => {
+    await createWriterSession();
+});
+
+messageManager.addListener('ENABLE_REWRITER', async () => {
+    await createRewriterSession();
+});
 
 messageManager.addListener('RESET_SESSION', async () => {
   resetAllSessions();
   copilotState.isEnabled = false;
   copilotState.activeTabId = null;
   await saveCopilotState();
-  
+
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
       chrome.tabs.sendMessage(tabs[0].id, { type: 'DESTROY_COPILOT_WRITER' }, (response) => {
@@ -195,15 +202,15 @@ messageManager.addListener('GET_COPILOT_STATUS', async () => {
 messageManager.addListener('CREATE_COMPLETION_SESSION', async () => {
   createCompletionSession();
   createPromptSession();
-  
+
   // 更新Copilot状态
   copilotState.isEnabled = true;
-  
+
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
       copilotState.activeTabId = tabs[0].id;
       saveCopilotState(); // 保存状态
-      
+
       chrome.tabs.sendMessage(tabs[0].id, { type: 'INIT_COPILOT_WRITER' }, (response) => {
         console.log('Content script response:', response);
       });
@@ -222,6 +229,7 @@ messageManager.addListener('COMPLETION_REQUEST', async (data, sender) => {
   return await handleCompletionRequest(data);
 });
 
+
 // Manage Storage
 async function getStorage(key) {
   return new Promise((resolve, reject) => {
@@ -233,7 +241,6 @@ async function getStorage(key) {
     });
   });
 }
-
 
 
 // Main Function
@@ -314,10 +321,15 @@ async function createCompletionSession() {
   });
 }
 
+
 async function createWriterSession() {
+  console.log('Creating writer session...');
   return await createSession('writer', async () => {
-    const options = {
-      tone: 'casual',
+    const result = await new Promise(resolve => {
+      chrome.storage.local.get(['writerOptions'], resolve);
+    });
+    const options = result.writerOptions || {
+      tone: 'neutral',
       length: 'medium',
       format: 'plain-text',
       sharedContext: '',
@@ -327,11 +339,15 @@ async function createWriterSession() {
 }
 
 async function createRewriterSession() {
+  console.log('Creating rewriter session...');
   return await createSession('rewriter', async () => {
-    const options = {
-      tone: 'more-casual',
-      format: 'plain-text',
-      length: 'shorter',
+    const result = await new Promise(resolve => {
+      chrome.storage.local.get(['rewriterOptions'], resolve);
+    });
+    const options = result.rewriterOptions || {
+      tone: 'as-is',
+      format: 'as-is',
+      length: 'as-is',
       sharedContext: '',
     };
     return await Rewriter.create(options);
@@ -340,17 +356,39 @@ async function createRewriterSession() {
 
 async function handleAIChat(data) {
   const { message, chatHistory } = data;
-  if (!sessions.prompt) {
-    createPromptSession();
+
+  // 1. 读取 pageTextSnapshot 作为 context
+  let pageText = '';
+  try {
+    const result = await new Promise(resolve => {
+      chrome.storage.local.get(['pageTextSnapshot'], resolve);
+    });
+    if (result.pageTextSnapshot) {
+      pageText = result.pageTextSnapshot;
+    }
+  } catch (e) {
+    console.warn('Failed to get pageTextSnapshot:', e);
   }
-  let fullPrompt = message;
+
+  if (!sessions.prompt) {
+    await createPromptSession();
+  }
+
+  // 2. 拼接 context + chat history + 当前消息
+  let fullPrompt = '';
+  if (pageText) {
+    fullPrompt += `Context from page:\n${pageText}\n\n`;
+  }
   if (chatHistory && chatHistory.length > 0) {
     const historyText = chatHistory.slice(-8).map(msg =>
       `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
     ).join('\n');
-    fullPrompt = `${historyText}\nUser: ${message}`;
+    fullPrompt += `${historyText}\nUser: ${message}`;
+  } else {
+    fullPrompt += message;
   }
 
+  // 3. 调用 prompt
   const response = await sessions.prompt.prompt(fullPrompt);
   return {
     response: response.trim(),

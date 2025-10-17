@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Copilot Web 测试页面</title>
+    <title>Copilot Web Test Page</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -68,117 +68,73 @@
     </style>
 </head>
 <body>
-    <h1>🚀 Copilot Web 自动补全测试</h1>
+    <h1>🚀 Copilot Web Auto-completion Test</h1>
     
     <div class="instructions">
-        <h3>📖 使用说明</h3>
+        <h3>📖 Instructions</h3>
         <ol>
-            <li>确保已安装 Copilot Web 扩展</li>
-            <li><strong>点击扩展图标打开侧边面板</strong> - 查看AI状态和诊断信息</li>
-            <li>在下面的输入框中输入文本</li>
-            <li>等待灰色的AI建议出现</li>
-            <li>按 <kbd>Tab</kbd> 键接受建议，或按 <kbd>Esc</kbd> 取消</li>
+            <li>Ensure the Copilot Web extension is installed</li>
+            <li><strong>Click the extension icon to open the side panel</strong> - Check AI status and diagnostics</li>
+            <li>Enter text in the input fields below</li>
+            <li>Wait for gray AI suggestions to appear</li>
+            <li>Press <kbd>Tab</kbd> to accept suggestions, or <kbd>Esc</kbd> to dismiss</li>
         </ol>
         
         <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin: 12px 0;">
-            <strong>⚠️ 重要提示</strong>: 如果AI显示"不可用"，请点击扩展图标打开侧边面板查看详细的诊断信息和解决方案。
+            <strong>⚠️ Important Note</strong>: If the AI shows "Unavailable," click the extension icon to open the side panel for detailed diagnostics and solutions.
         </div>
     </div>
 
     <div class="test-section">
-        <h2>📝 文本区域测试</h2>
-        <p>试试在这个文本框中输入代码或文本：</p>
-        <textarea placeholder="在这里输入一些代码或文本，比如：
+        <h2>📝 Text Area Test</h2>
+        <p>Try entering code or text in this text box:</p>
+        <textarea placeholder="Enter some code or text here, for example:
 function hello() {
     console.log(
-// 等待AI补全..."></textarea>
+// Wait for AI to complete..."></textarea>
     </div>
 
     <div class="test-section">
-        <h2>📧 输入框测试</h2>
-        <p>邮件主题：</p>
-        <input type="text" placeholder="输入邮件主题，比如：Re: 关于项目进度的">
+        <h2>📧 Input Field Test</h2>
+        <p>Email Subject:</p>
+        <input type="text" placeholder="Enter an email subject, e.g., Re: Project Progress">
         
-        <p>搜索框：</p>
-        <input type="search" placeholder="搜索内容，比如：如何在JavaScript中">
+        <p>Search Box:</p>
+        <input type="search" placeholder="Search content, e.g., How to in JavaScript">
     </div>
 
     <div class="test-section">
-        <h2>✏️ 富文本编辑器测试</h2>
-        <p>可编辑区域：</p>
+        <h2>✏️ Rich Text Editor Test</h2>
+        <p>Editable Area:</p>
         <div class="contenteditable" contenteditable="true">
-在这里输入内容测试 contenteditable 元素的补全功能...
+Enter content here to test the auto-completion functionality of contenteditable elements...
         </div>
     </div>
 
     <div class="test-section">
-        <h2>🧪 代码示例</h2>
-        <p>试试输入这些代码片段来测试AI补全：</p>
+        <h2>🧪 Code Examples</h2>
+        <p>Try entering these code snippets to test AI completion:</p>
         
         <div class="code-example">
-// JavaScript 示例
+// JavaScript Example
 function calculateTotal(items) {
     return items.reduce((sum, item) => 
 
-// React 示例  
+// React Example  
 const MyComponent = ({ data }) => {
     const [state, setState] = useState(
 
-// Python 示例
+// Python Example
 def process_data(data):
     filtered_data = [item for item in data if 
 
-// CSS 示例
+// CSS Example
 .container {
     display: flex;
     justify-content:
         </div>
         
-        <textarea placeholder="在这里粘贴上面的代码片段并继续输入..."></textarea>
+        <textarea placeholder="Paste the above code snippets here and continue typing..."></textarea>
     </div>
-
-    <div class="test-section">
-        <h2>🔧 调试信息</h2>
-        <p>如果自动补全不工作，请：</p>
-        <ol>
-            <li>按 F12 打开开发者工具</li>
-            <li>查看 Console 标签页的日志</li>
-            <li>确认扩展已正确加载</li>
-            <li>检查是否有错误信息</li>
-        </ol>
-        
-        <button onclick="testExtension()">测试扩展连接</button>
-        <div id="test-result" style="margin-top: 10px; padding: 10px; border-radius: 4px;"></div>
-    </div>
-
-    <script>
-        function testExtension() {
-            const resultDiv = document.getElementById('test-result');
-            
-            // 检查是否有扩展注入的元素
-            const ghostElement = document.getElementById('copilot-ghost-text');
-            
-            if (ghostElement) {
-                resultDiv.style.background = '#d4edda';
-                resultDiv.style.color = '#155724';
-                resultDiv.innerHTML = '✅ 扩展已正确加载！Ghost text 元素已创建。';
-            } else {
-                resultDiv.style.background = '#f8d7da';
-                resultDiv.style.color = '#721c24';
-                resultDiv.innerHTML = '❌ 扩展可能未正确加载。请检查扩展是否已启用。';
-            }
-            
-            // 输出一些调试信息
-            console.log('Extension test results:');
-            console.log('Ghost element exists:', !!ghostElement);
-            console.log('Document readyState:', document.readyState);
-            console.log('Text inputs found:', document.querySelectorAll('textarea, input[type="text"], input[type="search"], [contenteditable="true"]').length);
-        }
-        
-        // 页面加载后自动测试
-        window.addEventListener('load', () => {
-            setTimeout(testExtension, 1000);
-        });
-    </script>
 </body>
 </html>

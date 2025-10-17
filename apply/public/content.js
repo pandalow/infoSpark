@@ -4,15 +4,15 @@ let copilotWriter = null;
 // Using a namespace to avoid global variable conflicts
 const CopilotWriterManager = {
     instance: null,
-    
+
     getInstance() {
         if (!this.instance) {
             this.instance = new CopilotWriter();
         }
         return this.instance;
     },
-        
-        destroyInstance() {
+
+    destroyInstance() {
         if (this.instance) {
             console.log('Destroying CopilotWriter instance');
             this.instance.destroy();
@@ -53,7 +53,7 @@ function initializeCopilotIfEnabled() {
             if (chrome.runtime.lastError) {
                 return;
             }
-            
+
             if (response && response.success && response.data && response.data.isEnabled) {
                 try {
                     copilotWriter = CopilotWriterManager.getInstance();
@@ -90,7 +90,7 @@ window.addEventListener('load', () => {
 class CopilotWriter {
     constructor() {
         this.currentElement = null;
-        this.completionPanel = null; 
+        this.completionPanel = null;
         this.currentCompletion = "";
         this.debounceTimer = null;
         this.completionCache = new Map();
@@ -98,7 +98,7 @@ class CopilotWriter {
         this.mode = 'completion'; // 'completion' , 'writer', 'rewrite'
         this.port = null; // port for messaging with background
         this.isDestroyed = false; // flag to prevent reconnection after destroy
-
+        this.saveAllPageTextToStorage();
         this.init();
     }
 
@@ -350,7 +350,7 @@ class CopilotWriter {
         acceptBtn.addEventListener('click', () => {
             this.acceptCompletion();
         });
-        
+
         // 补全模式
         const completionBtn = document.getElementById('copilot-completion-btn');
         completionBtn.addEventListener('click', () => {
@@ -362,7 +362,7 @@ class CopilotWriter {
                 this.showCompletionPanel('等待补全内容...');
             }
         });
-        
+
         // 全文重写按钮
         const rewriteBtn = document.getElementById('copilot-rewrite-btn');
         rewriteBtn.addEventListener('click', () => {
@@ -410,7 +410,7 @@ class CopilotWriter {
         if (this.isTextInput(event.target)) {
             this.currentElement = event.target;
             console.log('Focused on text input:', event.target.tagName);
-            
+
             // 根据不同模式显示面板
             if (this.mode === 'completion') {
                 const text = this.getTextContext().fullText.trim();
@@ -468,9 +468,9 @@ class CopilotWriter {
     handleClick(event) {
         // 只有在completion模式下才自动隐藏面板
         // Writer和Rewrite模式需要用户手动关闭
-        if (this.mode === 'completion' && 
-            this.completionPanel && 
-            !this.completionPanel.contains(event.target) && 
+        if (this.mode === 'completion' &&
+            this.completionPanel &&
+            !this.completionPanel.contains(event.target) &&
             event.target !== this.currentElement) {
             this.hideCompletionPanel();
         }
@@ -582,20 +582,20 @@ class CopilotWriter {
             this.currentCompletion = '';
             this.showCompletionPanel('内容已插入，可以继续生成更多内容...');
         }
-        
+
         this.currentElement.dispatchEvent(new Event('input', { bubbles: true }));
         this.currentElement.focus();
     }
     destroy() {
         // 设置销毁标志，防止重连
         this.isDestroyed = true;
-        
+
         // 清除定时器
         if (this.debounceTimer) {
             clearTimeout(this.debounceTimer);
             this.debounceTimer = null;
         }
-        
+
         // 断开port连接
         if (this.port) {
             try {
@@ -605,13 +605,13 @@ class CopilotWriter {
             }
             this.port = null;
         }
-        
+
         // 移除面板DOM元素
         if (this.completionPanel && this.completionPanel.parentNode) {
             this.completionPanel.parentNode.removeChild(this.completionPanel);
             this.completionPanel = null;
         }
-        
+
         // 移除全局事件监听器
         if (this.handleFocusInBound) {
             document.removeEventListener('focusin', this.handleFocusInBound);
@@ -633,16 +633,16 @@ class CopilotWriter {
             document.removeEventListener('click', this.handleClickBound);
             this.handleClickBound = null;
         }
-        
+
         // 清空缓存
         this.completionCache.clear();
-        
+
         // 重置状态
         this.currentElement = null;
         this.currentCompletion = '';
         this.completionText = null;
         this.isRequesting = false;
-        
+
         console.log('CopilotWriter destroyed');
     }
 
@@ -652,7 +652,7 @@ class CopilotWriter {
             console.log('Writer request skipped: already requesting');
             return;
         }
-        
+
         this.mode = 'writer';
         this.currentCompletion = '';
         this.isRequesting = true;
@@ -675,7 +675,7 @@ class CopilotWriter {
 
         this.sendWriterRequest();
     }
-    
+
     sendWriterRequest() {
         try {
             // 发送消息给 background.js，启动 Writer 流式处理
@@ -688,7 +688,7 @@ class CopilotWriter {
             this.handleWriterError('Failed to send request');
         }
     }
-    
+
     handleWriterError(errorMessage) {
         this.isRequesting = false;
         this.showCompletionPanel(`Writer错误: ${errorMessage}`);
@@ -700,7 +700,7 @@ class CopilotWriter {
             console.log('Rewrite request skipped: already requesting');
             return;
         }
-        
+
         this.mode = 'rewrite';
         this.currentCompletion = '';
         this.isRequesting = true;
@@ -721,7 +721,7 @@ class CopilotWriter {
 
         this.sendRewriteRequest();
     }
-    
+
     sendRewriteRequest() {
         try {
             console.log('Sending REWRITER_STREAM message, port:', this.port);
@@ -734,7 +734,7 @@ class CopilotWriter {
             this.handleRewriteError('Failed to send request');
         }
     }
-    
+
     handleRewriteError(errorMessage) {
         this.isRequesting = false;
         this.showCompletionPanel(`重写错误: ${errorMessage}`);
@@ -760,7 +760,7 @@ class CopilotWriter {
         if (this.port) {
             return this.port; // 如果已经存在port，直接返回
         }
-        
+
         try {
             this.port = chrome.runtime.connect({ name: "AI_WRITER_STREAM" });
 
@@ -780,13 +780,13 @@ class CopilotWriter {
                     }, 1000);
                 }
             });
-            
+
             console.log('Port initialized successfully');
         } catch (error) {
             console.error('Failed to initialize port:', error);
             this.port = null;
         }
-        
+
         return this.port;
     }
 
@@ -796,7 +796,7 @@ class CopilotWriter {
         const textHash = this.simpleHash(text);
         return `${this.mode}_${textHash}_${text.length}`;
     }
-    
+
     simpleHash(str) {
         let hash = 0;
         if (str.length === 0) return hash;
@@ -845,5 +845,40 @@ class CopilotWriter {
             (tag === 'input' && ['text', 'email', 'search', 'url', 'password'].includes(type)) ||
             element.contentEditable === 'true'
         );
+    }
+
+    async saveAllPageTextToStorage() {
+        // 获取所有可见文本节点
+        function getAllVisibleText(node) {
+            let text = '';
+            if (node.nodeType === Node.TEXT_NODE) {
+                // 过滤掉空白
+                if (node.textContent.trim()) {
+                    text += node.textContent.trim() + ' ';
+                }
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                // 忽略script、style、noscript等
+                const tag = node.tagName && node.tagName.toLowerCase();
+                if (['script', 'style', 'noscript', 'svg', 'canvas', 'iframe'].includes(tag)) return '';
+                // 只遍历可见元素
+                const style = window.getComputedStyle(node);
+                if (style && (style.display === 'none' || style.visibility === 'hidden')) return '';
+                for (let child of node.childNodes) {
+                    text += getAllVisibleText(child);
+                }
+            }
+            return text;
+        }
+
+        const allText = getAllVisibleText(document.body).replace(/\s+/g, ' ').trim();
+
+        // 存储到chrome.storage.local
+        chrome.storage.local.set({ pageTextSnapshot: allText }, () => {
+            if (chrome.runtime.lastError) {
+                console.error('Failed to save page text:', chrome.runtime.lastError);
+            } else {
+                console.log('Page text saved to chrome.storage.local as "pageTextSnapshot"');
+            }
+        });
     }
 }
