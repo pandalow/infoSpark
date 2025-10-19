@@ -1,4 +1,29 @@
+// Set side panel behavior on installation
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === 'install') {
+    chrome.sidePanel
+      .setPanelBehavior({ openPanelOnActionClick: true })
+      .catch((error) => console.error(error));
+  }
+});
+
+
 class MessageManager {
+  /**
+   * Manages message passing between different parts of the extension.
+   * @constructor
+   * How to use:
+   *   const messageManager = new MessageManager();
+   *   messageManager.addListener('MESSAGE_TYPE', handlerFunction);
+   *   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+   *     messageManager.handleMessage(message, sender, sendResponse);
+   *     return true; // Indicate async response
+   *   });
+   * @example
+   *   messageManager.addListener('greeting', (data, sender) => {
+   *     console.log('Received greeting:', data);
+   *   });
+   */
 
   constructor() {
     this.listener = new Map();
@@ -6,7 +31,6 @@ class MessageManager {
   }
 
   addListener(type, handler) {
-    // Creating new type list storing handler
     if (!this.listener.has(type)) {
       this.listener.set(type, []);
     }
@@ -22,8 +46,7 @@ class MessageManager {
       }
     }
   }
-
-  // Receiving message 
+  // Handles incoming messages and routes them to the appropriate listener.
   handleMessage(message, sender, sendResponse) {
     const { type, data } = message;
     if (this.listener.has(type)) {
@@ -48,15 +71,8 @@ class MessageManager {
   }
 }
 
-const messageManager = new MessageManager();
 
-chrome.runtime.onInstalled.addListener(({ reason }) => {
-  if (reason === 'install') {
-    chrome.sidePanel
-      .setPanelBehavior({ openPanelOnActionClick: true })
-      .catch((error) => console.error(error));
-  }
-});
+const messageManager = new MessageManager();
 
 
 // Session management
@@ -103,25 +119,19 @@ async function initDefaults() {
   if (!('LanguageModel' in self)) {
     console.log("Prompt Model not available")
   }
-  // 恢复Copilot状态
+  // Revive Copilot state --- IGNORE ---
   await loadCopilotState();
   console.log('Copilot state loaded:', copilotState);
   isInitialized = true;
-  // Pending https://issues.chromium.org/issues/367771112.
-  // sliderTemperature.max = defaults.maxTemperature;
 }
 
 initDefaults();
 
-chrome.runtime.onStartup.addListener(() => {
-  console.log('Extension started');
-});
-
-// 监听tab更新（页面刷新、导航等）
+// Monitor tab updates (refresh, navigation, etc.)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   console.log('Tab updated:', tabId, changeInfo.status, 'copilotEnabled:', copilotState.isEnabled);
 
-  // 当页面完成加载且Copilot是启用状态时，自动初始化
+  // When a tab finishes loading, auto-init CopilotWriter if enabled
   if (changeInfo.status === 'complete' &&
     copilotState.isEnabled &&
     tab.url &&
@@ -130,7 +140,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
     console.log('Attempting to auto-init CopilotWriter for tab:', tabId, tab.url);
 
-    // 延迟一点确保content script已加载
+    // Set a slight delay to ensure content script is ready --- IGNORE ---
     setTimeout(() => {
       chrome.tabs.sendMessage(tabId, { type: 'INIT_COPILOT_WRITER' }, (response) => {
         if (chrome.runtime.lastError) {
@@ -143,26 +153,29 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
-// 监听活动tab切换
+// Monitor active tab changes
 chrome.tabs.onActivated.addListener((activeInfo) => {
   if (copilotState.isEnabled) {
-    // 更新当前活动tab
+    // Update current active tab
     copilotState.activeTabId = activeInfo.tabId;
     saveCopilotState();
   }
 });
 
+
+// Message Handling
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   messageManager.handleMessage(message, sender, sendResponse);
   return true;
 });
 
+// Register message listeners
 messageManager.addListener('CHAT_WITH_AI', async (data, sender) => {
   return await handleAIChat(data);
 });
 
 messageManager.addListener('UPDATE_CHAT_CONTEXT', async () => {
-  // 清除现有的 prompt session
+  // Clear existing prompt session
   if (sessions.prompt) {
     sessions.prompt.destroy();
     sessions.prompt = null;
@@ -170,6 +183,7 @@ messageManager.addListener('UPDATE_CHAT_CONTEXT', async () => {
   await createPromptSession();
   return true;
 });
+
 messageManager.addListener('CHECK_STATUS', async () => {
   return await checkingAvailability();
 })
@@ -199,7 +213,6 @@ messageManager.addListener('RESET_SESSION', async () => {
 });
 
 messageManager.addListener('GET_COPILOT_STATUS', async () => {
-  // 确保状态已经加载
   if (!isInitialized) {
     await loadCopilotState();
     isInitialized = true;
@@ -212,13 +225,13 @@ messageManager.addListener('CREATE_COMPLETION_SESSION', async () => {
   createCompletionSession();
   createPromptSession();
 
-  // 更新Copilot状态
+  // Enable Copilot
   copilotState.isEnabled = true;
 
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
       copilotState.activeTabId = tabs[0].id;
-      saveCopilotState(); // 保存状态
+      saveCopilotState(); // Save state
 
       chrome.tabs.sendMessage(tabs[0].id, { type: 'INIT_COPILOT_WRITER' }, (response) => {
         console.log('Content script response:', response);
@@ -228,6 +241,7 @@ messageManager.addListener('CREATE_COMPLETION_SESSION', async () => {
   return true;
 });
 
+// Completion Session Handling
 messageManager.addListener('ENABLE_COMPLETION', async () => {
   if (!sessions.completion) {
     await createCompletionSession();
@@ -239,7 +253,7 @@ messageManager.addListener('COMPLETION_REQUEST', async (data, sender) => {
 });
 
 
-// Manage Storage
+// Storage Management
 async function getStorage(key) {
   return new Promise((resolve, reject) => {
     chrome.storage.local.get([key], (result) => {
@@ -287,11 +301,6 @@ async function createSession(type, createFn) {
 }
 
 async function createPromptSession() {
-
-  chrome.storage.local.remove(['pageTextSnapshot']).catch((error) => {
-    console.error('Failed to remove pageTextSnapshot from storage:', error);
-  });
-
   return await createSession('prompt', async () => {
 
     const content = await getStorage('prompt_content');
@@ -314,13 +323,13 @@ async function createPromptSession() {
   });
 }
 
-
 async function createCompletionSession() {
   return await createSession('completion', async () => {
     const initialPrompts = [
       {
         role: 'system',
-        content: "You are a writer assistant, Please help to complete user's text. Only return the completion part."
+        content: "You are a concise writing assistant. Always reply with only the direct continuation, short and sharp sentences, avoiding redundancy. Maximum 2 sentences."
+
       }
     ];
     return await LanguageModel.create({
@@ -335,7 +344,6 @@ async function createCompletionSession() {
     });
   });
 }
-
 
 async function createWriterSession() {
   console.log('Creating writer session...');
@@ -372,7 +380,7 @@ async function createRewriterSession() {
 async function handleAIChat(data) {
   const { message, chatHistory } = data;
 
-  // 1. 读取 pageTextSnapshot 作为 context
+  // Read pageTextSnapshot as context
   let pageText = '';
   try {
     const result = await new Promise(resolve => {
@@ -389,7 +397,7 @@ async function handleAIChat(data) {
     await createPromptSession();
   }
 
-  // 2. 拼接 context + chat history + 当前消息
+  // Construct full prompt with context + chat history + current message
   let fullPrompt = '';
   if (pageText) {
     fullPrompt += `Context from page:\n${pageText}\n\n`;
@@ -403,7 +411,7 @@ async function handleAIChat(data) {
     fullPrompt += message;
   }
 
-  // 3. 调用 prompt
+  // Call prompt
   const response = await sessions.prompt.prompt(fullPrompt);
   return {
     response: response.trim(),
@@ -414,24 +422,22 @@ async function handleAIChat(data) {
 async function handleCompletionRequest(data) {
   const { prompt } = data;
   console.log('Processing completion request for:', prompt);
-  // 确保 completionSession 存在
+  // Ensure completionSession exists
   if (!sessions.completion) {
     await createCompletionSession();
   }
 
-  // 构建补全提示
+  // Construct completion prompt
   const completionPrompt = `Complete the following text. Only return the completion part: ${prompt}`;
 
-  // 使用 Prompt API 获取补全
   const response = await sessions.completion.prompt(completionPrompt);
   console.log('Received completion response:', response);
   return { completion: response.trim() };
 }
 
 
-// Writer
+// Writer Streaming Handling
 chrome.runtime.onConnect.addListener((port) => {
-  console.log('New port connection received:', port.name);
   if (port.name === "AI_WRITER_STREAM") {
 
     port.onMessage.addListener(async (message) => {
@@ -444,21 +450,18 @@ chrome.runtime.onConnect.addListener((port) => {
         for await (const chunk of stream) {
           port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
         }
-        console.log('Stream completed');
         port.postMessage({ type: "STREAM_END" });
+        console.log('Writer stream completed');
       } else if (message.type === "REWRITER_STREAM") {
         console.log('Processing REWRITER_STREAM request');
         const { prompt } = message.data;
         if (!sessions.rewriter) {
-          console.log('Creating rewriter session...');
           await createRewriterSession();
         }
-        console.log('Starting rewriteStreaming...');
         const stream = sessions.rewriter.rewriteStreaming(prompt, { context: '' });
         for await (const chunk of stream) {
           port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
         }
-        console.log('Rewrite stream completed');
         port.postMessage({ type: "STREAM_END" });
       }
     });
