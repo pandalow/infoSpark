@@ -1,17 +1,17 @@
 async function saveAllPageTextToStorage() {
-    // 获取所有可见文本节点
+    // Acquire all visible text from the page
     function getAllVisibleText(node) {
         let text = '';
         if (node.nodeType === Node.TEXT_NODE) {
-            // 过滤掉空白
+            // Filter out whitespace
             if (node.textContent.trim()) {
                 text += node.textContent.trim() + ' ';
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
-            // 忽略script、style、noscript等
+            // Ignore script, style, noscript, etc.
             const tag = node.tagName && node.tagName.toLowerCase();
             if (['script', 'style', 'noscript', 'svg', 'canvas', 'iframe'].includes(tag)) return '';
-            // 只遍历可见元素
+            // Only traverse visible elements
             const style = window.getComputedStyle(node);
             if (style && (style.display === 'none' || style.visibility === 'hidden')) return '';
             for (let child of node.childNodes) {
@@ -23,7 +23,7 @@ async function saveAllPageTextToStorage() {
 
     const allText = getAllVisibleText(document.body).replace(/\s+/g, ' ').trim();
 
-    // 存储到chrome.storage.local
+    // Store to chrome.storage.local
     chrome.storage.local.set({ pageTextSnapshot: allText }, () => {
         if (chrome.runtime.lastError) {
             console.error('Failed to save page text:', chrome.runtime.lastError);
@@ -302,7 +302,7 @@ class CopilotWriter {
             completionButton.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
         });
 
-        // 创建全文重写按钮
+        // Rewrite button
         const rewriteButton = document.createElement('button');
         rewriteButton.id = 'copilot-rewrite-btn';
         rewriteButton.textContent = 'Rewrite';
@@ -328,7 +328,7 @@ class CopilotWriter {
             rewriteButton.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
         });
 
-        // 创建Writer按钮
+        // Writer button
         const writerButton = document.createElement('button');
         writerButton.id = 'copilot-writer-btn';
         writerButton.textContent = 'Writer';
@@ -354,7 +354,7 @@ class CopilotWriter {
             writerButton.style.boxShadow = '0 4px 12px rgba(245, 158, 11, 0.3)';
         });
 
-        // 组装面板
+        // Assemble panel
         buttonContainer.appendChild(acceptButton);
         buttonContainer.appendChild(completionButton);
         buttonContainer.appendChild(rewriteButton);
@@ -368,11 +368,11 @@ class CopilotWriter {
 
         document.body.appendChild(this.completionPanel);
 
-        // 绑定事件
+        // Bind events
         this.setupPanelEvents();
     }
 
-    // 设置面板事件
+    // Setup panel events
     setupPanelEvents() {
         // close button
         const closeBtn = document.getElementById('copilot-close-btn');
@@ -380,13 +380,13 @@ class CopilotWriter {
             this.hideCompletionPanel();
         });
 
-        // 接受补全按钮
+        // Accept button
         const acceptBtn = document.getElementById('copilot-accept-btn');
         acceptBtn.addEventListener('click', () => {
             this.acceptCompletion();
         });
 
-        // 补全模式
+        // Completion mode button
         const completionBtn = document.getElementById('copilot-completion-btn');
         completionBtn.addEventListener('click', () => {
             this.mode = 'completion';
@@ -710,7 +710,7 @@ class CopilotWriter {
         }
     }
 
-    // 打开Writer功能
+    // Writer connection and streaming
     async getWriter() {
         if (this.isRequesting) {
             console.log('Cancelling current request to start Writer');
@@ -726,7 +726,7 @@ class CopilotWriter {
 
         if (!this.port) {
             this.initializePort();
-            // 等待一点时间让port初始化
+            // Set a timeout to wait for port initialization
             setTimeout(() => {
                 if (this.port) {
                     this.sendWriterRequest();
@@ -739,10 +739,9 @@ class CopilotWriter {
 
         this.sendWriterRequest();
     }
-
+    // Send writer request through port
     sendWriterRequest() {
         try {
-            // 发送消息给 background.js，启动 Writer 流式处理
             this.port.postMessage({
                 type: 'WRITER_STREAM',
                 data: { prompt: this.getTextContext().fullText }
@@ -758,7 +757,7 @@ class CopilotWriter {
         this.showCompletionPanel(`Writer错误: ${errorMessage}`);
     }
 
-    // 全文重写功能
+    // Full text rewrite connection and streaming
     async rewriteFullText() {
         if (this.isRequesting) {
             console.log('Cancelling current request to start Rewriter');
@@ -768,11 +767,11 @@ class CopilotWriter {
         this.mode = 'rewrite';
         this.currentCompletion = '';
         this.isRequesting = true;
-        this.showCompletionPanel('正在重写内容...');
+        this.showCompletionPanel('Rewriting full text...');
 
         if (!this.port) {
             this.initializePort();
-            // 等待一点时间让port初始化
+            // Set a timeout to wait for port initialization
             setTimeout(() => {
                 if (this.port) {
                     this.sendRewriteRequest();
@@ -785,7 +784,7 @@ class CopilotWriter {
 
         this.sendRewriteRequest();
     }
-
+    // Send rewrite request through port
     sendRewriteRequest() {
         try {
             console.log('Sending REWRITER_STREAM message, port:', this.port);
@@ -822,7 +821,7 @@ class CopilotWriter {
 
     initializePort() {
         if (this.port) {
-            return this.port; // 如果已经存在port，直接返回
+            return this.port; // if already initialized
         }
 
         try {
@@ -836,7 +835,7 @@ class CopilotWriter {
             this.port.onDisconnect.addListener(() => {
                 console.log('Port disconnected');
                 this.port = null;
-                // 如果不是主动断开，尝试重连
+                // If not disconnected intentionally, try to reconnect
                 if (!this.isDestroyed) {
                     setTimeout(() => {
                         console.log('Attempting to reconnect port...');
@@ -854,7 +853,7 @@ class CopilotWriter {
         return this.port;
     }
 
-    // Keep a simple hash for caching
+    // Keep a hash for caching
     generateCacheKey(context) {
         const text = context.fullText.trim();
         const textHash = this.simpleHash(text);
@@ -877,7 +876,7 @@ class CopilotWriter {
             return { fullText: '' };
         }
         const text = this.currentElement.value || this.currentElement.textContent || '';
-        console.log('获取的完整文本:', text);
+        console.log('Full text:', text);
         return { fullText: text };
 
     }
