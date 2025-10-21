@@ -31,7 +31,7 @@ function Chat({ aiStatus, enablePrompt }) {
             setChatHistory([...newHistory, aiMessage]);
         } catch (error) {
             console.error('Error sending message:', error);
-            // 添加错误消息到聊天历史
+            // Adding error message to chat history
             const errorMessage = {
                 role: 'assistant',
                 content: 'Sorry, I encountered an error. Please try again.'

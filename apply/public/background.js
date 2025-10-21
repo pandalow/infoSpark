@@ -174,6 +174,18 @@ messageManager.addListener('CHAT_WITH_AI', async (data, sender) => {
   return await handleAIChat(data);
 });
 
+messageManager.addListener('UPDATE_COMPLETION_OPTIONS', async () => {
+  // 通知content script更新配置
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'UPDATE_COMPLETION_OPTIONS' }, (response) => {
+        console.log('Completion options updated on content script:', response);
+      });
+    }
+  });
+  return true;
+});
+
 messageManager.addListener('UPDATE_CHAT_CONTEXT', async () => {
   // Clear existing prompt session
   if (sessions.prompt) {
@@ -187,10 +199,6 @@ messageManager.addListener('UPDATE_CHAT_CONTEXT', async () => {
 messageManager.addListener('CHECK_STATUS', async () => {
   return await checkingAvailability();
 })
-
-messageManager.addListener('ENABLE_WRITER', async () => {
-  await createWriterSession();
-});
 
 messageManager.addListener('ENABLE_REWRITER', async () => {
   await createRewriterSession();
@@ -247,11 +255,6 @@ messageManager.addListener('ENABLE_COMPLETION', async () => {
     await createCompletionSession();
   }
 });
-
-messageManager.addListener('COMPLETION_REQUEST', async (data, sender) => {
-  return await handleCompletionRequest(data);
-});
-
 
 // Storage Management
 async function getStorage(key) {
@@ -417,39 +420,62 @@ async function handleAIChat(data) {
   };
 }
 
-async function handleCompletionRequest(data) {
-  const { prompt } = data;
-  console.log('Processing completion request for:', prompt);
-  // 注意：这个方法现在主要用于非流式的兼容性，流式处理在 onConnect 中
-  if (!sessions.completion) {
-    await createCompletionSession();
-  }
-
-  // 构造更好的completion prompt
-  const completionPrompt = `Continue writing from this text naturally and concisely: "${prompt}"`;
-
-  const response = await sessions.completion.prompt(completionPrompt);
-  console.log('Received completion response:', response);
-  return { completion: response.trim() };
-}
-
-
-// Writer Streaming Handling
+// Streaming Handling
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "AI_WRITER_STREAM") {
 
     port.onMessage.addListener(async (message) => {
       try {
         if (message.type === "COMPLETION_STREAM") {
-          const { prompt } = message.data;
-          console.log('Starting completion stream for:', prompt);
+          const { prompt, paragraphText, fullPageText, metadata, options } = message.data;
+          console.log('Starting completion stream with context level:', options?.contextLevel || 'none');
           
           if (!sessions.completion) {
             await createCompletionSession();
           }
+    
+          let completionPrompt = '';
           
-          // 构造更好的completion prompt
-          const completionPrompt = `Continue writing from this text naturally and concisely: "${prompt}"`;
+          if (options?.enableContextAware && options.contextLevel !== 'none') {
+            if (options.contextLevel === 'paragraph') {
+              // Use paragraph-specific context text
+              const contextToUse = paragraphText || '';
+              const maxLength = Math.min(options.maxContextLength || 1000, 1000);
+              const truncatedContext = contextToUse.length > maxLength ? 
+                contextToUse.substring(0, maxLength) + '...' : contextToUse;
+                
+              completionPrompt = `Based on this paragraph context: "${truncatedContext}"
+
+Continue writing from this text naturally and concisely: "${prompt}"`;
+              
+              console.log('Using paragraph context, length:', contextToUse.length);
+              
+            } else if (options.contextLevel === 'fullpage') {
+              // Use full page context text
+              const contextToUse = fullPageText || '';
+              const maxLength = Math.min(options.maxContextLength || 1000, 3000);
+              
+              // Smart truncation: keep beginning and end parts
+              let truncatedContext = '';
+              if (contextToUse.length > maxLength) {
+                const startPart = contextToUse.substring(0, Math.floor(maxLength * 0.4));
+                const endPart = contextToUse.substring(Math.max(0, contextToUse.length - Math.floor(maxLength * 0.6)));
+                truncatedContext = startPart + "\n...[content omitted]...\n" + endPart;
+              } else {
+                truncatedContext = contextToUse;
+              }
+              
+              completionPrompt = `Based on this page context (${metadata?.contentType || 'general'} content, title: "${metadata?.title || 'Unknown'}"): "${truncatedContext}"
+
+Continue writing from this text naturally and contextually: "${prompt}"`;
+              
+              console.log('Using full page context, original length:', contextToUse.length, 'truncated length:', truncatedContext.length);
+            }
+          } else {
+            // No context mode - use only the current input
+            completionPrompt = `Continue writing from this text naturally and concisely: "${prompt}"`;
+            console.log('Using no context mode');
+          }
           
           const stream = sessions.completion.promptStreaming(completionPrompt);
           for await (const chunk of stream) {

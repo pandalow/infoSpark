@@ -3,6 +3,11 @@ import { chromeMessaging } from '../chromeMessaging';
 
 function Context({ aiStatus, enablePrompt }) {
     const [context, setContext] = useState("");
+    const [completionOptions, setCompletionOptions] = useState({
+        contextLevel: "none", // none, paragraph, fullpage
+        maxContextLength: 1000,
+        enableContextAware: true
+    });
     const [writerOptions, setWriterOptions] = useState({
         tone: "casual",
         length: "medium",
@@ -15,14 +20,14 @@ function Context({ aiStatus, enablePrompt }) {
         length: "as-is",
         sharedContext: "",
     });
-    const [isHide, setIsHide] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [activeSettingsTab, setActiveSettingsTab] = useState('writer');
+    const [activeSettingsTab, setActiveSettingsTab] = useState('completion');
     const [saveSuccess, setSaveSuccess] = useState(false);
     const isFirstSave = useRef(true);
 
     useEffect(() => {
         loadContext();
+        loadCompletionOptions();
     }, []);
 
     async function loadContext() {
@@ -35,6 +40,17 @@ function Context({ aiStatus, enablePrompt }) {
         } catch (error) {
             console.error('Error loading context:', error);
             isFirstSave.current = false;
+        }
+    }
+
+    async function loadCompletionOptions() {
+        try {
+            const savedOptions = await chromeMessaging.getStorage('completionOptions');
+            if (savedOptions) {
+                setCompletionOptions({ ...completionOptions, ...savedOptions });
+            }
+        } catch (error) {
+            console.error('Error loading completion options:', error);
         }
     }
 
@@ -95,6 +111,21 @@ function Context({ aiStatus, enablePrompt }) {
         setTimeout(() => setSaveSuccess(false), 2000);
     }
 
+    function handleSaveCompletionOptions() {
+        chrome.storage.local.set({
+            completionOptions: {
+                contextLevel: completionOptions.contextLevel,
+                maxContextLength: completionOptions.maxContextLength,
+                enableContextAware: completionOptions.enableContextAware
+            }
+        });
+        chromeMessaging.sendMessage('UPDATE_COMPLETION_OPTIONS');
+        
+        // 显示保存成功提示
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000);
+    }
+
     return (
         <div className="h-full space-y-6">
             {/* AI Context Configuration */}
@@ -146,8 +177,17 @@ function Context({ aiStatus, enablePrompt }) {
             <div className="glass-card-dark p-4">
                 {/* Tab Navigation */}
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-slate-800">AI Settings</h3>
+                    <h3 className="text-lg font-semibold text-slate-800">Assistant</h3>
                     <div className="flex bg-slate-100 rounded-lg p-1">
+                        <button
+                            onClick={() => setActiveSettingsTab('completion')}
+                            className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${activeSettingsTab === 'completion'
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-slate-600 hover:text-slate-800'
+                                }`}
+                        >
+                            Completion
+                        </button>
                         <button
                             onClick={() => setActiveSettingsTab('writer')}
                             className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${activeSettingsTab === 'writer'
@@ -168,6 +208,85 @@ function Context({ aiStatus, enablePrompt }) {
                         </button>
                     </div>
                 </div>
+
+                {/* Completion Settings */}
+                {activeSettingsTab === 'completion' && (
+                    <div className="space-y-4 modern-fade-in">
+                        <div>
+                            <label className="block text-slate-700 text-sm font-medium mb-2">Context Awareness Level</label>
+                            <select className="input-modern"
+                                value={completionOptions.contextLevel}
+                                onChange={e => setCompletionOptions({ ...completionOptions, contextLevel: e.target.value })}
+                            >
+                                <option value="none">None - Only current input</option>
+                                <option value="paragraph">Paragraph - Current paragraph context</option>
+                                <option value="fullpage">Full Page - Entire page context</option>
+                            </select>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Higher levels provide more context but may impact performance
+                            </p>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-slate-700 text-sm font-medium mb-2">
+                                Enable Context Awareness
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="enableContextAware"
+                                    checked={completionOptions.enableContextAware}
+                                    onChange={e => setCompletionOptions({ ...completionOptions, enableContextAware: e.target.checked })}
+                                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <label htmlFor="enableContextAware" className="text-sm text-slate-700">
+                                    Use page context to improve completions
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-slate-700 text-sm font-medium mb-2">
+                                Max Context Length (characters)
+                            </label>
+                            <input
+                                type="number"
+                                className="input-modern"
+                                value={completionOptions.maxContextLength}
+                                onChange={e => setCompletionOptions({ ...completionOptions, maxContextLength: parseInt(e.target.value) || 1000 })}
+                                min="100"
+                                max="5000"
+                                step="100"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">
+                                Limit context to prevent performance issues (100-5000 chars)
+                            </p>
+                        </div>
+
+                        <div className="bg-blue-50 p-3 rounded-lg">
+                            <h4 className="text-sm font-medium text-blue-800 mb-2">Context Levels Explained:</h4>
+                            <ul className="text-xs text-blue-700 space-y-1">
+                                <li><strong>None:</strong> Only uses your current typing for completion</li>
+                                <li><strong>Paragraph:</strong> Uses surrounding paragraph text for better context</li>
+                                <li><strong>Full Page:</strong> Uses entire page content for maximum context awareness</li>
+                            </ul>
+                        </div>
+
+                        <div className="mt-6 flex justify-end gap-3">
+                            {saveSuccess && (
+                                <div className="flex items-center gap-1 text-green-600">
+                                    <span className="text-sm">✅ Saved successfully!</span>
+                                </div>
+                            )}
+                            <button
+                                className="btn-modern btn-primary"
+                                onClick={handleSaveCompletionOptions}
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Writer Settings */}
                 {activeSettingsTab === 'writer' && (

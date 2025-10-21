@@ -78,6 +78,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const isActive = copilotWriter !== null;
         sendResponse({ success: true, isActive });
     }
+    if (message.type === 'UPDATE_COMPLETION_OPTIONS') {
+        if (copilotWriter) {
+            copilotWriter.loadCompletionOptions();
+            console.log('Completion options updated');
+        }
+        sendResponse({ success: true });
+    }
 });
 
 // When the content script loads, check if Copilot is enabled and initialize if so.
@@ -135,14 +142,35 @@ class CopilotWriter {
         this.mode = 'completion'; // 'completion' , 'writer', 'rewrite'
         this.port = null; // port for messaging with background
         this.isDestroyed = false; // flag to prevent reconnection after destroy
+        this.completionOptions = {
+            contextLevel: "none",
+            maxContextLength: 1000,
+            enableContextAware: true
+        };
         this.init();
     }
 
     async init() {
+        await this.loadCompletionOptions(); // 加载配置
         this.initializePort(); // initialize the port for messaging
         this.createCompletionPanel(); // create the fixed panel
         this.setupGlobalEventListeners();
         console.log('CopilotWriter initialized');
+    }
+
+    // 加载completion配置
+    async loadCompletionOptions() {
+        try {
+            const result = await new Promise(resolve => {
+                chrome.storage.local.get(['completionOptions'], resolve);
+            });
+            if (result.completionOptions) {
+                this.completionOptions = { ...this.completionOptions, ...result.completionOptions };
+            }
+            console.log('Completion options loaded:', this.completionOptions);
+        } catch (error) {
+            console.error('Failed to load completion options:', error);
+        }
     }
 
     // Handle incoming messages from the port
@@ -155,10 +183,10 @@ class CopilotWriter {
             console.log(`${this.mode} stream ended`);
             this.isRequesting = false; // Reset request state
             
-            // 缓存完成的补全结果（仅限 completion 模式）
+            // Cache completed completion results (completion mode only)
             if (this.mode === 'completion' && this.currentCompletion) {
                 const context = this.getTextContext();
-                const cacheKey = this.generateCacheKey({ fullText: context.fullText.trim() });
+                const cacheKey = this.generateCacheKey(context);
                 this.completionCache.set(cacheKey, this.currentCompletion);
                 console.log('Completion cached:', this.currentCompletion);
             }
@@ -512,7 +540,7 @@ class CopilotWriter {
             console.log('Input detected, scheduling completion request');
             this.debounceTimer = setTimeout(() => {
                 this.requestCompletion();
-            }, 1000); // 1 秒
+            }, 1000); // 1 second debounce
         }
     }
 
@@ -689,7 +717,7 @@ class CopilotWriter {
         }
 
         // Check cache
-        const cacheKey = this.generateCacheKey({ fullText });
+        const cacheKey = this.generateCacheKey(context);
         if (this.completionCache.has(cacheKey)) {
             const cachedCompletion = this.completionCache.get(cacheKey);
             this.currentCompletion = cachedCompletion;
@@ -710,7 +738,7 @@ class CopilotWriter {
 
         // Show loading state
         this.showCompletionPanel('Loading...');
-        console.log('Sending completion request, text content:', fullText);
+        console.log('Sending completion request, text content:', context.fullText.substring(0, 100));
         
         try {
             // 确保端口已初始化
@@ -718,15 +746,14 @@ class CopilotWriter {
                 await this.initializePort();
             }
             
-            // 发送流式请求 - 不需要等待返回值，通过 handlePortMessage 处理响应
-            await this.sendCompletionRequest(fullText);
+            // 发送流式请求 - 传递完整的上下文信息
+            await this.sendCompletionRequest(context);
             
         } catch (error) {
             console.error('Error requesting completion:', error);
             this.showCompletionPanel('Completion failed, please try again');
             this.isRequesting = false;
         }
-        // 注意：不在这里设置 isRequesting = false，因为流式响应会在 handlePortMessage 中处理
     }
 
     // Writer connection and streaming
@@ -811,7 +838,7 @@ class CopilotWriter {
         this.showCompletionPanel(`REWRITE ERROR: ${errorMessage}`);
     }
 
-    async sendCompletionRequest(prompt) {
+    async sendCompletionRequest(context) {
         if (!this.port) {
             await this.initializePort();
         }
@@ -819,9 +846,15 @@ class CopilotWriter {
         try {
             this.port.postMessage({
                 type: "COMPLETION_STREAM",
-                data: { prompt }
+                data: { 
+                    prompt: context.fullText,
+                    paragraphText: context.paragraphText,  // Send paragraph context separately
+                    fullPageText: context.fullPageText,    // Send full page context separately
+                    metadata: context.metadata,
+                    options: this.completionOptions
+                }
             });
-            console.log('Completion stream request sent');
+            console.log('Completion stream request sent with context level:', this.completionOptions.contextLevel);
         } catch (error) {
             console.error('Error sending completion request:', error);
             throw error;
@@ -870,10 +903,21 @@ class CopilotWriter {
     }
 
     // Keep a hash for caching
+    // Generate cache key based on context level and actual context used
     generateCacheKey(context) {
         const text = context.fullText.trim();
-        const textHash = this.simpleHash(text);
-        return `${this.mode}_${textHash}_${text.length}`;
+        
+        // Select the appropriate context text based on the current level
+        let contextText = '';
+        if (this.completionOptions.contextLevel === 'paragraph') {
+            contextText = context.paragraphText || '';
+        } else if (this.completionOptions.contextLevel === 'fullpage') {
+            contextText = context.fullPageText || '';
+        }
+        
+        const combinedText = text + contextText;
+        const textHash = this.simpleHash(combinedText);
+        return `${this.mode}_${this.completionOptions.contextLevel}_${textHash}_${combinedText.length}`;
     }
 
     simpleHash(str) {
@@ -889,12 +933,160 @@ class CopilotWriter {
 
     getTextContext() {
         if (!this.currentElement) {
-            return { fullText: '' };
+            return { fullText: '', paragraphText: '', fullPageText: '', metadata: {} };
         }
-        const text = this.currentElement.value || this.currentElement.textContent || '';
-        console.log('Full text:', text);
-        return { fullText: text };
 
+        // Get current input field text
+        const fullText = this.currentElement.value || this.currentElement.textContent || '';
+        
+        // Always get both paragraph and full page context, let backend choose based on config
+        let paragraphText = '';
+        let fullPageText = '';
+        let metadata = {};
+
+        if (this.completionOptions.enableContextAware && this.completionOptions.contextLevel !== 'none') {
+            paragraphText = this.getParagraphContext();
+            fullPageText = this.getFullPageContext();
+            
+            // Apply length limits
+            const maxLength = this.completionOptions.maxContextLength;
+            if (paragraphText.length > maxLength) {
+                paragraphText = paragraphText.substring(0, maxLength) + '...';
+            }
+            if (fullPageText.length > maxLength) {
+                fullPageText = fullPageText.substring(0, maxLength) + '...';
+            }
+            
+            metadata = this.getPageMetadata();
+        }
+
+        console.log('Context collected:', {
+            fullText: fullText.substring(0, 100) + '...',
+            paragraphText: paragraphText.substring(0, 100) + '...',
+            fullPageText: fullPageText.substring(0, 100) + '...',
+            contextLevel: this.completionOptions.contextLevel,
+            metadata
+        });
+
+        return { fullText, paragraphText, fullPageText, metadata };
+    }
+
+    // Get paragraph-level context
+    getParagraphContext() {
+        if (!this.currentElement) return '';
+
+        try {
+            // Find the closest paragraph element
+            let contextElement = this.currentElement.closest('p, div, section, article, main');
+            
+            // If no paragraph found, try parent element
+            if (!contextElement) {
+                contextElement = this.currentElement.parentElement;
+            }
+            
+            if (contextElement) {
+                // Get paragraph text, excluding current input content
+                const paragraphText = this.getCleanText(contextElement);
+                return paragraphText;
+            }
+        } catch (error) {
+            console.warn('Error getting paragraph context:', error);
+        }
+
+        return '';
+    }
+
+    // Get full page context
+    getFullPageContext() {
+        try {
+            // Get main content area of the page
+            const mainContent = document.querySelector('main, article, .content, #content, .main') || document.body;
+            
+            // Get page title
+            const pageTitle = document.title || '';
+            
+            // Get main text content
+            const bodyText = this.getCleanText(mainContent);
+            
+            // Combine context
+            let context = '';
+            if (pageTitle) {
+                context += `Title: ${pageTitle}\n\n`;
+            }
+            context += bodyText;
+
+            return context;
+        } catch (error) {
+            console.warn('Error getting full page context:', error);
+            return '';
+        }
+    }
+
+    // Get cleaned text content
+    getCleanText(element) {
+        if (!element) return '';
+
+        // Clone element to avoid modifying original DOM
+        const clone = element.cloneNode(true);
+
+        // Remove unwanted elements
+        const unwantedSelectors = [
+            'script', 'style', 'noscript', 'iframe', 'embed', 'object',
+            'nav', 'header', 'footer', 'aside', '.advertisement', '.ad',
+            'input', 'textarea', 'button', 'select'
+        ];
+
+        unwantedSelectors.forEach(selector => {
+            const elements = clone.querySelectorAll(selector);
+            elements.forEach(el => el.remove());
+        });
+
+        // Get text and clean it
+        let text = clone.textContent || clone.innerText || '';
+        
+        // Clean excessive whitespace
+        text = text.replace(/\s+/g, ' ').trim();
+        
+        return text;
+    }
+
+    // Get page metadata
+    getPageMetadata() {
+        const metadata = {};
+
+        try {
+            // Get page title
+            metadata.title = document.title || '';
+
+            // Get meta description
+            const metaDescription = document.querySelector('meta[name="description"]');
+            if (metaDescription) {
+                metadata.description = metaDescription.getAttribute('content') || '';
+            }
+
+            // Get page language
+            metadata.language = document.documentElement.lang || 'en';
+
+            // Get page URL type
+            metadata.domain = window.location.hostname;
+            metadata.path = window.location.pathname;
+
+            // Detect content type
+            if (window.location.hostname.includes('github.com')) {
+                metadata.contentType = 'code';
+            } else if (window.location.hostname.includes('stackoverflow.com')) {
+                metadata.contentType = 'technical';
+            } else if (document.querySelector('article, .post, .blog')) {
+                metadata.contentType = 'article';
+            } else {
+                metadata.contentType = 'general';
+            }
+
+        } catch (error) {
+            console.warn('Error getting page metadata:', error);
+        }
+
+        return metadata;
     }
 
     getCursorPosition() {
