@@ -532,13 +532,13 @@ class CopilotWriter {
             const cachedCompletion = this.completionCache.get(cacheKey);
             this.currentCompletion = cachedCompletion;
             this.showCompletionPanel(cachedCompletion);
-            console.log('使用缓存的补全结果');
+            console.log('Using cached completion');
             return;
         }
 
-        // 限制缓存大小
+        // Queue management
         if (this.completionCache.size >= 50) {
-            // 删除最老的缓存项
+            console.log('Cache is full, removing oldest entry');
             const firstKey = this.completionCache.keys().next().value;
             this.completionCache.delete(firstKey);
         }
@@ -546,9 +546,9 @@ class CopilotWriter {
         this.isRequesting = true;
         this.currentCompletion = '';
 
-        // 显示加载状态
-        this.showCompletionPanel('Generating text...');
-        console.log('发送补全请求，文本内容:', fullText);
+        // Show loading state
+        this.showCompletionPanel('Loading...');
+        console.log('Sending completion request, text content:', fullText);
         try {
             const response = await this.sendCompletionRequest(fullText);
             const completion = response.data.completion || response.completion;
@@ -569,15 +569,15 @@ class CopilotWriter {
         }
     }
 
-    // 显示补全面板
+    // Show the completion panel with given text
     showCompletionPanel(completion) {
         if (!this.completionPanel || !this.completionText) return;
 
         this.completionText.textContent = completion;
         this.completionPanel.style.display = 'block';
 
-        // 如果是加载状态，禁用按钮
-        const isLoading = completion === '正在生成补全内容...';
+        // If loading state, disable buttons
+        const isLoading = completion === 'loading...';
         const buttons = this.completionPanel.querySelectorAll('button:not(#copilot-close-btn)');
         buttons.forEach(btn => {
             btn.disabled = isLoading;
@@ -585,7 +585,7 @@ class CopilotWriter {
         });
     }
 
-    // 隐藏补全面板
+    // Hide the completion panel
     hideCompletionPanel() {
         if (this.completionPanel) {
             this.completionPanel.style.display = 'none';
@@ -593,7 +593,7 @@ class CopilotWriter {
         this.currentCompletion = '';
     }
 
-    // 接受补全
+    // Accept the current completion and insert it into the text field
     acceptCompletion() {
         if (!this.currentCompletion || !this.currentElement) {
             return;
@@ -631,16 +631,16 @@ class CopilotWriter {
 
     // Destroy the CopilotWriter instance
     destroy() {
-        // 设置销毁标志，防止重连
+        // Set destroy flag to prevent reconnection
         this.isDestroyed = true;
 
-        // 清除定时器
+        // Clear timers
         if (this.debounceTimer) {
             clearTimeout(this.debounceTimer);
             this.debounceTimer = null;
         }
 
-        // 断开port连接
+        // Disconnect port
         if (this.port) {
             try {
                 this.port.disconnect();
@@ -650,13 +650,13 @@ class CopilotWriter {
             this.port = null;
         }
 
-        // 移除面板DOM元素
+        // Remove completion panel DOM element
         if (this.completionPanel && this.completionPanel.parentNode) {
             this.completionPanel.parentNode.removeChild(this.completionPanel);
             this.completionPanel = null;
         }
 
-        // 移除全局事件监听器
+        // Remove global event listeners
         if (this.handleFocusInBound) {
             document.removeEventListener('focusin', this.handleFocusInBound);
             this.handleFocusInBound = null;
@@ -678,10 +678,10 @@ class CopilotWriter {
             this.handleClickBound = null;
         }
 
-        // 清空缓存
+        // Clear cache
         this.completionCache.clear();
 
-        // 重置状态
+        // Reset state
         this.currentElement = null;
         this.currentCompletion = '';
         this.completionText = null;
@@ -690,13 +690,13 @@ class CopilotWriter {
         console.log('CopilotWriter destroyed');
     }
 
-    // 取消当前请求
+    // Cancel current request
     cancelCurrentRequest() {
         if (this.isRequesting) {
             this.isRequesting = false;
             this.currentCompletion = '';
-            
-            // 如果有活跃的port连接，断开它以停止流式传输
+
+            // If there is an active port connection, disconnect it to stop streaming
             if (this.port) {
                 try {
                     this.port.disconnect();
