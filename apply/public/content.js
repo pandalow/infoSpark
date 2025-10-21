@@ -22,7 +22,6 @@ async function saveAllPageTextToStorage() {
     }
 
     const allText = getAllVisibleText(document.body).replace(/\s+/g, ' ').trim();
-
     // Store to chrome.storage.local
     chrome.storage.local.set({ pageTextSnapshot: allText }, () => {
         if (chrome.runtime.lastError) {
@@ -32,8 +31,6 @@ async function saveAllPageTextToStorage() {
         }
     });
 }
-
-saveAllPageTextToStorage();
 
 // CopilotWriter Instance Management
 let copilotWriter = null;
@@ -90,7 +87,6 @@ function initializeCopilotIfEnabled() {
             if (chrome.runtime.lastError) {
                 return;
             }
-
             if (response && response.success && response.data && response.data.isEnabled) {
                 try {
                     copilotWriter = CopilotWriterManager.getInstance();
@@ -104,12 +100,17 @@ function initializeCopilotIfEnabled() {
     }, 200); // Slight delay to ensure background script is ready
 }
 
+function init() {
+    saveAllPageTextToStorage();
+    initializeCopilotIfEnabled();
+}
+
 if (document.readyState === 'loading') {
     console.log('DOM still loading, waiting for DOMContentLoaded');
-    document.addEventListener('DOMContentLoaded', initializeCopilotIfEnabled);
+    document.addEventListener('DOMContentLoaded', init);
 } else {
     console.log('DOM already loaded, initializing immediately');
-    initializeCopilotIfEnabled();
+    init();
 }
 
 // listen for window load event as a fallback
@@ -144,7 +145,7 @@ class CopilotWriter {
         console.log('CopilotWriter initialized');
     }
 
-    // 处理来自 port 的消息
+    // Handle incoming messages from the port
     handlePortMessage(msg) {
         if (msg.type === 'STREAM_CHUNK') {
             this.currentCompletion += msg.data.chunk;
@@ -153,6 +154,14 @@ class CopilotWriter {
         if (msg.type === 'STREAM_END') {
             console.log(`${this.mode} stream ended`);
             this.isRequesting = false; // Reset request state
+            
+            // 缓存完成的补全结果（仅限 completion 模式）
+            if (this.mode === 'completion' && this.currentCompletion) {
+                const context = this.getTextContext();
+                const cacheKey = this.generateCacheKey({ fullText: context.fullText.trim() });
+                this.completionCache.set(cacheKey, this.currentCompletion);
+                console.log('Completion cached:', this.currentCompletion);
+            }
         }
         if (msg.type === 'STREAM_ERROR') {
             console.error(`${this.mode} stream error:`, msg.error);
@@ -390,7 +399,7 @@ class CopilotWriter {
         const completionBtn = document.getElementById('copilot-completion-btn');
         completionBtn.addEventListener('click', () => {
             this.mode = 'completion';
-            // 切换到completion模式时，如果没有内容则隐藏面板
+            // Switch to completion mode, hide panel if no content --- IGNORE ---
             if (!this.getTextContext().fullText.trim()) {
                 this.hideCompletionPanel();
             } else {
@@ -398,21 +407,21 @@ class CopilotWriter {
             }
         });
 
-        // 全文重写按钮
+        // Rewrite button
         const rewriteBtn = document.getElementById('copilot-rewrite-btn');
         rewriteBtn.addEventListener('click', () => {
             this.mode = 'rewrite';
             this.rewriteFullText();
         });
 
-        // Writer按钮
+        // Writer button
         const writerBtn = document.getElementById('copilot-writer-btn');
         writerBtn.addEventListener('click', () => {
             this.mode = 'writer';
             this.getWriter();
         });
 
-        // 添加悬停效果
+        // Add hover effect
         [acceptBtn, rewriteBtn, writerBtn].forEach(btn => {
             btn.addEventListener('mouseenter', () => {
                 btn.style.opacity = '0.8';
@@ -425,7 +434,7 @@ class CopilotWriter {
         });
     }
 
-    // 统一设置全局事件监听器
+    // Setup global event listeners
     setupGlobalEventListeners() {
         this.handleFocusInBound = this.handleFocusIn.bind(this);
         this.handleFocusOutBound = this.handleFocusOut.bind(this);
@@ -440,7 +449,7 @@ class CopilotWriter {
         document.addEventListener('click', this.handleClickBound);
     }
 
-    // 事件处理方法
+    // Event handler methods
     handleFocusIn(event) {
         if (this.isTextInput(event.target)) {
             this.currentElement = event.target;
@@ -462,22 +471,28 @@ class CopilotWriter {
     }
 
     handleFocusOut(event) {
-        // if (event.target === this.currentElement) {
-        //     this.currentElement = null;
-        // }
+        if (this.mode === 'completion' && this.completionPanel &&
+            !this.completionPanel.contains(event.target)) {
+            // Delay hiding to allow click events on panel
+            setTimeout(() => {
+                if (!this.completionPanel.matches(':hover')) {
+                    this.hideCompletionPanel();
+                }
+            }, 200);
+        }
     }
 
     handleKeyDown(event) {
         if (!this.currentElement) return;
 
-        // Tab键接受补全
+        // Tab key accepts completion
         if (event.key === 'Tab' && this.currentCompletion && this.completionPanel.style.display === 'block') {
             event.preventDefault();
             this.acceptCompletion();
             return;
         }
 
-        // Escape键隐藏面板
+        // Escape key hides panel
         if (event.key === 'Escape' && this.completionPanel.style.display === 'block') {
             event.preventDefault();
             this.hideCompletionPanel();
@@ -500,9 +515,10 @@ class CopilotWriter {
             }, 1000); // 1 秒
         }
     }
+
     handleClick(event) {
-        // 只有在completion模式下才自动隐藏面板
-        // Writer和Rewrite模式需要用户手动关闭
+        // Only hide panel automatically in completion mode
+        // Writer and Rewrite modes require manual closing
         if (this.mode === 'completion' &&
             this.completionPanel &&
             !this.completionPanel.contains(event.target) &&
@@ -512,62 +528,6 @@ class CopilotWriter {
     }
 
     // Main logic to request completion
-    async requestCompletion() {
-        if (!this.currentElement || this.isRequesting) {
-            console.log('Request skipped: no element, disabled, or already requesting');
-            return;
-        }
-        const context = this.getTextContext();
-        const fullText = context.fullText.trim();
-
-        if (!fullText) {
-            console.log('Request skipped: empty input');
-            this.hideCompletionPanel();
-            return;
-        }
-
-        // 检查缓存
-        const cacheKey = this.generateCacheKey({ fullText });
-        if (this.completionCache.has(cacheKey)) {
-            const cachedCompletion = this.completionCache.get(cacheKey);
-            this.currentCompletion = cachedCompletion;
-            this.showCompletionPanel(cachedCompletion);
-            console.log('Using cached completion');
-            return;
-        }
-
-        // Queue management
-        if (this.completionCache.size >= 50) {
-            console.log('Cache is full, removing oldest entry');
-            const firstKey = this.completionCache.keys().next().value;
-            this.completionCache.delete(firstKey);
-        }
-
-        this.isRequesting = true;
-        this.currentCompletion = '';
-
-        // Show loading state
-        this.showCompletionPanel('Loading...');
-        console.log('Sending completion request, text content:', fullText);
-        try {
-            const response = await this.sendCompletionRequest(fullText);
-            const completion = response.data.completion || response.completion;
-            if (completion) {
-                this.currentCompletion = completion;
-                this.completionCache.set(cacheKey, completion);
-                this.showCompletionPanel(completion);
-                console.log('Completion successfully:', completion);
-            } else {
-                this.showCompletionPanel('No completion available');
-                console.log('No valid completion received:', response);
-            }
-        } catch (error) {
-            console.error('Error requesting completion:', error);
-            this.showCompletionPanel('Completion failed, please try again');
-        } finally {
-            this.isRequesting = false;
-        }
-    }
 
     // Show the completion panel with given text
     showCompletionPanel(completion) {
@@ -690,6 +650,9 @@ class CopilotWriter {
         console.log('CopilotWriter destroyed');
     }
 
+
+    
+
     // Cancel current request
     cancelCurrentRequest() {
         if (this.isRequesting) {
@@ -705,9 +668,65 @@ class CopilotWriter {
                 }
                 this.port = null;
             }
-            
+
             console.log('Current request cancelled');
         }
+    }
+
+    async requestCompletion() {
+        if (!this.currentElement || this.isRequesting) {
+            console.log('Request skipped: no element, disabled, or already requesting');
+            return;
+        }
+        
+        const context = this.getTextContext();
+        const fullText = context.fullText.trim();
+
+        if (!fullText) {
+            console.log('Request skipped: empty input');
+            this.hideCompletionPanel();
+            return;
+        }
+
+        // Check cache
+        const cacheKey = this.generateCacheKey({ fullText });
+        if (this.completionCache.has(cacheKey)) {
+            const cachedCompletion = this.completionCache.get(cacheKey);
+            this.currentCompletion = cachedCompletion;
+            this.showCompletionPanel(cachedCompletion);
+            console.log('Using cached completion');
+            return;
+        }
+
+        // Queue management
+        if (this.completionCache.size >= 50) {
+            console.log('Cache is full, removing oldest entry');
+            const firstKey = this.completionCache.keys().next().value;
+            this.completionCache.delete(firstKey);
+        }
+
+        this.isRequesting = true;
+        this.currentCompletion = '';
+
+        // Show loading state
+        this.showCompletionPanel('Loading...');
+        console.log('Sending completion request, text content:', fullText);
+        
+        try {
+            // 确保端口已初始化
+            if (!this.port) {
+                await this.initializePort();
+            }
+            
+            // 发送流式请求 - 不需要等待返回值，通过 handlePortMessage 处理响应
+            await this.sendCompletionRequest(fullText);
+            
+        } catch (error) {
+            console.error('Error requesting completion:', error);
+            this.showCompletionPanel('Completion failed, please try again');
+            this.isRequesting = false;
+        }
+        // 注意：不在这里设置 isRequesting = false，因为流式响应会在 handlePortMessage 中处理
     }
 
     // Writer connection and streaming
@@ -724,21 +743,16 @@ class CopilotWriter {
 
         console.log('Sending WRITER_STREAM message, port:', this.port);
 
-        if (!this.port) {
-            this.initializePort();
-            // Set a timeout to wait for port initialization
-            setTimeout(() => {
-                if (this.port) {
-                    this.sendWriterRequest();
-                } else {
-                    this.handleWriterError('Failed to establish connection');
-                }
-            }, 100);
-            return;
+        try {
+            if (!this.port) {
+                await this.initializePort();
+            }
+            this.sendWriterRequest();
+        } catch (error) {
+            this.handleWriterError('Failed to establish connection');
         }
-
-        this.sendWriterRequest();
     }
+
     // Send writer request through port
     sendWriterRequest() {
         try {
@@ -769,20 +783,14 @@ class CopilotWriter {
         this.isRequesting = true;
         this.showCompletionPanel('Rewriting full text...');
 
-        if (!this.port) {
-            this.initializePort();
-            // Set a timeout to wait for port initialization
-            setTimeout(() => {
-                if (this.port) {
-                    this.sendRewriteRequest();
-                } else {
-                    this.handleRewriteError('Failed to establish connection');
-                }
-            }, 100);
-            return;
+        try {
+            if (!this.port) {
+                await this.initializePort();
+            }
+            this.sendRewriteRequest();
+        } catch (error) {
+            this.handleRewriteError('Failed to establish connection');
         }
-
-        this.sendRewriteRequest();
     }
     // Send rewrite request through port
     sendRewriteRequest() {
@@ -800,15 +808,24 @@ class CopilotWriter {
 
     handleRewriteError(errorMessage) {
         this.isRequesting = false;
-        this.showCompletionPanel(`重写错误: ${errorMessage}`);
+        this.showCompletionPanel(`REWRITE ERROR: ${errorMessage}`);
     }
 
     async sendCompletionRequest(prompt) {
-        const response = await chrome.runtime.sendMessage({
-            type: "COMPLETION_REQUEST",
-            data: { prompt }
-        });
-        return response;
+        if (!this.port) {
+            await this.initializePort();
+        }
+        
+        try {
+            this.port.postMessage({
+                type: "COMPLETION_STREAM",
+                data: { prompt }
+            });
+            console.log('Completion stream request sent');
+        } catch (error) {
+            console.error('Error sending completion request:', error);
+            throw error;
+        }
     }
 
     async enableCompletion() {
@@ -819,38 +836,37 @@ class CopilotWriter {
         return response;
     }
 
-    initializePort() {
-        if (this.port) {
-            return this.port; // if already initialized
-        }
-
-        try {
-            this.port = chrome.runtime.connect({ name: "AI_WRITER_STREAM" });
-
-            this.port.onMessage.addListener((msg) => {
-                console.log('Port received message:', msg);
-                this.handlePortMessage(msg);
-            });
-
-            this.port.onDisconnect.addListener(() => {
-                console.log('Port disconnected');
+    async initializePort() {
+        if (this.port) return this.port;
+        
+        return new Promise((resolve, reject) => {
+            try {
+                this.port = chrome.runtime.connect({ name: "AI_WRITER_STREAM" });
+                
+                this.port.onMessage.addListener((msg) => {
+                    this.handlePortMessage(msg);
+                });
+                
+                this.port.onDisconnect.addListener(() => {
+                    console.log('Port disconnected, last error:', chrome.runtime.lastError);
+                    this.port = null;
+                    this.isRequesting = false;
+                    
+                    // 添加重连条件判断，避免无限重连
+                    if (!this.isDestroyed && chrome.runtime.lastError && 
+                        !chrome.runtime.lastError.message.includes('Receiving end does not exist')) {
+                        console.log('Attempting to reconnect in 2 seconds...');
+                        setTimeout(() => this.initializePort(), 2000);
+                    }
+                });
+                
+                resolve(this.port);
+            } catch (error) {
+                console.error('Failed to initialize port:', error);
                 this.port = null;
-                // If not disconnected intentionally, try to reconnect
-                if (!this.isDestroyed) {
-                    setTimeout(() => {
-                        console.log('Attempting to reconnect port...');
-                        this.initializePort();
-                    }, 1000);
-                }
-            });
-
-            console.log('Port initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize port:', error);
-            this.port = null;
-        }
-
-        return this.port;
+                reject(error);
+            }
+        });
     }
 
     // Keep a hash for caching

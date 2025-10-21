@@ -265,7 +265,6 @@ async function getStorage(key) {
   });
 }
 
-
 // Main Function
 async function checkingAvailability() {
   const promptAvailability = await LanguageModel.availability();
@@ -328,17 +327,16 @@ async function createCompletionSession() {
     const initialPrompts = [
       {
         role: 'system',
-        content: "You are a concise writing assistant. Always reply with only the direct continuation, short and sharp sentences, avoiding redundancy. Maximum 2 sentences."
-
+        content: "You are a smart writing assistant. When given text, continue it naturally with 1-2 relevant sentences. Be concise, contextual, and helpful. Only provide the continuation, not the original text."
       }
     ];
     return await LanguageModel.create({
       initialPrompts,
-      temperature: 0.7,
+      temperature: 0.8,
       topK: 3,
       monitor(m) {
         m.addEventListener('downloadprogress', (e) => {
-          console.log(`Downloaded ${e.loaded * 100}%`);
+          console.log(`Completion model downloaded ${e.loaded * 100}%`);
         });
       },
     });
@@ -422,13 +420,13 @@ async function handleAIChat(data) {
 async function handleCompletionRequest(data) {
   const { prompt } = data;
   console.log('Processing completion request for:', prompt);
-  // Ensure completionSession exists
+  // 注意：这个方法现在主要用于非流式的兼容性，流式处理在 onConnect 中
   if (!sessions.completion) {
     await createCompletionSession();
   }
 
-  // Construct completion prompt
-  const completionPrompt = `Complete the following text. Only return the completion part: ${prompt}`;
+  // 构造更好的completion prompt
+  const completionPrompt = `Continue writing from this text naturally and concisely: "${prompt}"`;
 
   const response = await sessions.completion.prompt(completionPrompt);
   console.log('Received completion response:', response);
@@ -441,33 +439,66 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "AI_WRITER_STREAM") {
 
     port.onMessage.addListener(async (message) => {
-      if (message.type === "WRITER_STREAM") {
-        const { prompt } = message.data;
-        if (!sessions.writer) {
-          await createWriterSession();
+      try {
+        if (message.type === "COMPLETION_STREAM") {
+          const { prompt } = message.data;
+          console.log('Starting completion stream for:', prompt);
+          
+          if (!sessions.completion) {
+            await createCompletionSession();
+          }
+          
+          // 构造更好的completion prompt
+          const completionPrompt = `Continue writing from this text naturally and concisely: "${prompt}"`;
+          
+          const stream = sessions.completion.promptStreaming(completionPrompt);
+          for await (const chunk of stream) {
+            port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+          }
+          port.postMessage({ type: "STREAM_END" });
+          console.log('Completion stream completed');
+          
+        } else if (message.type === "WRITER_STREAM") {
+          const { prompt } = message.data;
+          console.log('Starting writer stream for:', prompt);
+          
+          if (!sessions.writer) {
+            await createWriterSession();
+          }
+          
+          const stream = sessions.writer.writeStreaming(prompt, { context: '' });
+          for await (const chunk of stream) {
+            port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+          }
+          port.postMessage({ type: "STREAM_END" });
+          console.log('Writer stream completed');
+          
+        } else if (message.type === "REWRITER_STREAM") {
+          console.log('Starting rewriter stream for:', message.data.prompt);
+          const { prompt } = message.data;
+          
+          if (!sessions.rewriter) {
+            await createRewriterSession();
+          }
+          
+          const stream = sessions.rewriter.rewriteStreaming(prompt, { context: '' });
+          for await (const chunk of stream) {
+            port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+          }
+          port.postMessage({ type: "STREAM_END" });
+          console.log('Rewriter stream completed');
         }
-        const stream = sessions.writer.writeStreaming(prompt, { context: '' });
-        for await (const chunk of stream) {
-          port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
-        }
-        port.postMessage({ type: "STREAM_END" });
-        console.log('Writer stream completed');
-      } else if (message.type === "REWRITER_STREAM") {
-        console.log('Processing REWRITER_STREAM request');
-        const { prompt } = message.data;
-        if (!sessions.rewriter) {
-          await createRewriterSession();
-        }
-        const stream = sessions.rewriter.rewriteStreaming(prompt, { context: '' });
-        for await (const chunk of stream) {
-          port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
-        }
-        port.postMessage({ type: "STREAM_END" });
+      } catch (error) {
+        console.error(`Stream error for ${message.type}:`, error);
+        port.postMessage({ 
+          type: "STREAM_ERROR", 
+          error: error.message || 'Unknown error occurred' 
+        });
       }
     });
 
     port.onDisconnect.addListener(() => {
-      console.log("Writer stream disconnected");
+      console.log("AI stream port disconnected");
     });
   }
 });
