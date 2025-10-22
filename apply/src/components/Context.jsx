@@ -4,7 +4,7 @@ import { chromeMessaging } from '../chromeMessaging';
 function Context({ aiStatus, enablePrompt }) {
     const [context, setContext] = useState("");
     const [completionOptions, setCompletionOptions] = useState({
-        contextLevel: "none", // none, paragraph, fullpage
+        contextLevel: "paragraph", // none, paragraph, fullpage
         maxContextLength: 1000,
         enableContextAware: true
     });
