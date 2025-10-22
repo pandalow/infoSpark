@@ -137,6 +137,8 @@ class CopilotWriter {
         this.completionPanel = null;
         this.currentCompletion = "";
         this.debounceTimer = null;
+        this.hideTimer = null; // 用于延迟隐藏面板
+        this.scrollTimer = null; // 用于滚动防抖
         this.completionCache = new Map();
         this.isRequesting = false;
         this.mode = 'completion'; // 'completion' , 'writer', 'rewrite'
@@ -198,21 +200,19 @@ class CopilotWriter {
         }
     }
 
-    // Creating the fixed completion panel  
+    // Creating the completion panel that follows the input  
     createCompletionPanel() {
         // Creating the main container
         this.completionPanel = document.createElement('div');
         this.completionPanel.id = 'copilot-completion-panel';
         this.completionPanel.style.cssText = `
             position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 400px;
-            max-height: 350px;
+            width: 420px;
+            max-height: 300px;
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 16px;
+            border-radius: 12px;
             box-shadow: 0 8px 32px 0 rgba(59, 130, 246, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.8);
             z-index: 999999;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -469,12 +469,15 @@ class CopilotWriter {
         this.handleKeyDownBound = this.handleKeyDown.bind(this);
         this.handleInputBound = this.handleInput.bind(this);
         this.handleClickBound = this.handleClick.bind(this);
+        this.handleScrollBound = this.handleScroll.bind(this);
 
         document.addEventListener('focusin', this.handleFocusInBound);
         document.addEventListener('focusout', this.handleFocusOutBound);
         document.addEventListener('keydown', this.handleKeyDownBound);
         document.addEventListener('input', this.handleInputBound);
         document.addEventListener('click', this.handleClickBound);
+        window.addEventListener('scroll', this.handleScrollBound, true); // 使用捕获模式
+        window.addEventListener('resize', this.handleScrollBound);
     }
 
     // Event handler methods
@@ -483,8 +486,16 @@ class CopilotWriter {
             this.currentElement = event.target;
             console.log('Focused on text input:', event.target.tagName);
 
+            // 清除任何待定的隐藏定时器
+            if (this.hideTimer) {
+                clearTimeout(this.hideTimer);
+                this.hideTimer = null;
+            }
+
             // 根据不同模式显示面板
             if (this.mode === 'completion') {
+                this.showCompletionPanel('Ready for text completion...');
+                // 如果有文本，则自动请求补全
                 const text = this.getTextContext().fullText.trim();
                 if (text) {
                     this.showCompletionPanel('Waiting for completion...');
@@ -499,14 +510,26 @@ class CopilotWriter {
     }
 
     handleFocusOut(event) {
-        if (this.mode === 'completion' && this.completionPanel &&
-            !this.completionPanel.contains(event.target)) {
+        // 只有在失去焦点的目标不是文本输入框，且不是面板内的元素时才隐藏
+        if (this.mode === 'completion' && 
+            this.completionPanel && 
+            !this.completionPanel.contains(event.target) &&
+            !this.isTextInput(event.relatedTarget)) {
+            
+            // 清除之前的定时器
+            if (this.hideTimer) {
+                clearTimeout(this.hideTimer);
+            }
+            
             // Delay hiding to allow click events on panel
-            setTimeout(() => {
-                if (!this.completionPanel.matches(':hover')) {
+            this.hideTimer = setTimeout(() => {
+                // 检查当前是否仍然有活跃的文本输入框，且面板不在hover状态
+                if (!this.completionPanel.matches(':hover') && 
+                    (!document.activeElement || !this.isTextInput(document.activeElement))) {
                     this.hideCompletionPanel();
                 }
-            }, 200);
+                this.hideTimer = null;
+            }, 300);
         }
     }
 
@@ -555,14 +578,54 @@ class CopilotWriter {
         }
     }
 
+    handleScroll(event) {
+        // 当页面滚动或窗口大小改变时，重新定位面板
+        if (this.completionPanel && 
+            this.completionPanel.style.display === 'block' && 
+            this.currentElement) {
+            
+            // 使用防抖来避免频繁重新定位
+            if (this.scrollTimer) {
+                clearTimeout(this.scrollTimer);
+            }
+            
+            this.scrollTimer = setTimeout(() => {
+                // 检查当前元素是否仍然在视口中可见
+                const rect = this.currentElement.getBoundingClientRect();
+                const isVisible = rect.top >= 0 && 
+                                rect.left >= 0 && 
+                                rect.bottom <= window.innerHeight && 
+                                rect.right <= window.innerWidth;
+                
+                if (isVisible) {
+                    this.positionPanel();
+                } else {
+                    // 如果输入框不在视口中，隐藏面板
+                    this.hideCompletionPanel();
+                }
+                this.scrollTimer = null;
+            }, 16); // ~60fps
+        }
+    }
+
     // Main logic to request completion
 
     // Show the completion panel with given text
     showCompletionPanel(completion) {
-        if (!this.completionPanel || !this.completionText) return;
+        if (!this.completionPanel || !this.completionText) {
+            console.log('showCompletionPanel: missing panel or text element', {
+                completionPanel: !!this.completionPanel,
+                completionText: !!this.completionText
+            });
+            return;
+        }
 
+        console.log('showCompletionPanel: showing panel with text:', completion);
         this.completionText.textContent = completion;
         this.completionPanel.style.display = 'block';
+
+        // Position the panel relative to the current input element
+        this.positionPanel();
 
         // If loading state, disable buttons
         const isLoading = completion === 'loading...';
@@ -571,6 +634,76 @@ class CopilotWriter {
             btn.disabled = isLoading;
             btn.style.opacity = isLoading ? '0.5' : '1';
         });
+    }
+
+    // Position the panel relative to the current input element
+    positionPanel() {
+        if (!this.currentElement || !this.completionPanel) {
+            console.log('positionPanel: missing element or panel', {
+                currentElement: !!this.currentElement,
+                completionPanel: !!this.completionPanel
+            });
+            return;
+        }
+
+        const rect = this.currentElement.getBoundingClientRect();
+        
+        // 使用固定定位，这样更稳定
+        this.completionPanel.style.position = 'fixed';
+        
+        // 面板尺寸
+        const panelWidth = 420;
+        const panelHeight = 300;
+        const padding = 8;
+        
+        // 视口尺寸
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        // 直接放在输入框的正下方
+        let left = rect.left;
+        let top = rect.bottom + padding;
+        
+        // 如果面板宽度超过输入框宽度，居中对齐
+        if (panelWidth > rect.width) {
+            left = rect.left + (rect.width - panelWidth) / 2;
+        }
+        
+        // 检查右边界，如果超出则向左调整
+        if (left + panelWidth > viewportWidth) {
+            left = viewportWidth - panelWidth - padding;
+        }
+        
+        // 检查左边界
+        if (left < padding) {
+            left = padding;
+        }
+        
+        // 检查下边界，如果超出则放到输入框上方
+        if (top + panelHeight > viewportHeight) {
+            top = rect.top - panelHeight - padding;
+            // 如果上方也放不下，则放到视口顶部
+            if (top < padding) {
+                top = padding;
+            }
+        }
+        
+        console.log('positionPanel: positioning below input at', {
+            left: left,
+            top: top,
+            inputRect: {
+                left: rect.left,
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+                width: rect.width,
+                height: rect.height
+            },
+            viewport: { width: viewportWidth, height: viewportHeight }
+        });
+        
+        this.completionPanel.style.left = `${left}px`;
+        this.completionPanel.style.top = `${top}px`;
     }
 
     // Hide the completion panel
@@ -627,6 +760,14 @@ class CopilotWriter {
             clearTimeout(this.debounceTimer);
             this.debounceTimer = null;
         }
+        if (this.hideTimer) {
+            clearTimeout(this.hideTimer);
+            this.hideTimer = null;
+        }
+        if (this.scrollTimer) {
+            clearTimeout(this.scrollTimer);
+            this.scrollTimer = null;
+        }
 
         // Disconnect port
         if (this.port) {
@@ -664,6 +805,11 @@ class CopilotWriter {
         if (this.handleClickBound) {
             document.removeEventListener('click', this.handleClickBound);
             this.handleClickBound = null;
+        }
+        if (this.handleScrollBound) {
+            window.removeEventListener('scroll', this.handleScrollBound, true);
+            window.removeEventListener('resize', this.handleScrollBound);
+            this.handleScrollBound = null;
         }
 
         // Clear cache
