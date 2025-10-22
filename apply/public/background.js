@@ -423,10 +423,25 @@ async function handleAIChat(data) {
 // Streaming Handling
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "AI_WRITER_STREAM") {
+    // Track abort controllers for each stream type per port
+    const abortControllers = {
+      completion: null,
+      writer: null,
+      rewriter: null
+    };
 
     port.onMessage.addListener(async (message) => {
       try {
         if (message.type === "COMPLETION_STREAM") {
+          // Abort previous completion stream if running
+          if (abortControllers.completion) {
+            console.log('Aborting previous completion stream');
+            abortControllers.completion.abort();
+          }
+          
+          // Create new abort controller for this stream
+          abortControllers.completion = new AbortController();
+          
           const { prompt, paragraphText, fullPageText, metadata, options } = message.data;
           console.log('Starting completion stream with context level:', options?.contextLevel || 'none');
           
@@ -477,14 +492,39 @@ Continue writing from this text naturally and contextually: "${prompt}"`;
             console.log('Using no context mode');
           }
           
-          const stream = sessions.completion.promptStreaming(completionPrompt);
-          for await (const chunk of stream) {
-            port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+          try {
+            const stream = sessions.completion.promptStreaming(completionPrompt, {
+              signal: abortControllers.completion.signal
+            });
+            
+            for await (const chunk of stream) {
+              port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+            }
+            port.postMessage({ type: "STREAM_END" });
+            console.log('Completion stream completed');
+            
+            // Clear the controller after successful completion
+            abortControllers.completion = null;
+            
+          } catch (error) {
+            if (error.name === 'AbortError') {
+              console.log('Completion stream aborted');
+              port.postMessage({ type: "STREAM_ABORTED" });
+            } else {
+              throw error; // Re-throw other errors
+            }
           }
-          port.postMessage({ type: "STREAM_END" });
-          console.log('Completion stream completed');
           
         } else if (message.type === "WRITER_STREAM") {
+          // Abort previous writer stream if running
+          if (abortControllers.writer) {
+            console.log('Aborting previous writer stream');
+            abortControllers.writer.abort();
+          }
+          
+          // Create new abort controller for this stream
+          abortControllers.writer = new AbortController();
+          
           const { prompt } = message.data;
           console.log('Starting writer stream for:', prompt);
           
@@ -492,14 +532,40 @@ Continue writing from this text naturally and contextually: "${prompt}"`;
             await createWriterSession();
           }
           
-          const stream = sessions.writer.writeStreaming(prompt, { context: '' });
-          for await (const chunk of stream) {
-            port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+          try {
+            const stream = sessions.writer.writeStreaming(prompt, { 
+              context: '',
+              signal: abortControllers.writer.signal 
+            });
+            
+            for await (const chunk of stream) {
+              port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+            }
+            port.postMessage({ type: "STREAM_END" });
+            console.log('Writer stream completed');
+            
+            // Clear the controller after successful completion
+            abortControllers.writer = null;
+            
+          } catch (error) {
+            if (error.name === 'AbortError') {
+              console.log('Writer stream aborted');
+              port.postMessage({ type: "STREAM_ABORTED" });
+            } else {
+              throw error; // Re-throw other errors
+            }
           }
-          port.postMessage({ type: "STREAM_END" });
-          console.log('Writer stream completed');
           
         } else if (message.type === "REWRITER_STREAM") {
+          // Abort previous rewriter stream if running
+          if (abortControllers.rewriter) {
+            console.log('Aborting previous rewriter stream');
+            abortControllers.rewriter.abort();
+          }
+          
+          // Create new abort controller for this stream
+          abortControllers.rewriter = new AbortController();
+          
           console.log('Starting rewriter stream for:', message.data.prompt);
           const { prompt } = message.data;
           
@@ -507,12 +573,29 @@ Continue writing from this text naturally and contextually: "${prompt}"`;
             await createRewriterSession();
           }
           
-          const stream = sessions.rewriter.rewriteStreaming(prompt, { context: '' });
-          for await (const chunk of stream) {
-            port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+          try {
+            const stream = sessions.rewriter.rewriteStreaming(prompt, { 
+              context: '',
+              signal: abortControllers.rewriter.signal 
+            });
+            
+            for await (const chunk of stream) {
+              port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+            }
+            port.postMessage({ type: "STREAM_END" });
+            console.log('Rewriter stream completed');
+            
+            // Clear the controller after successful completion
+            abortControllers.rewriter = null;
+            
+          } catch (error) {
+            if (error.name === 'AbortError') {
+              console.log('Rewriter stream aborted');
+              port.postMessage({ type: "STREAM_ABORTED" });
+            } else {
+              throw error; // Re-throw other errors
+            }
           }
-          port.postMessage({ type: "STREAM_END" });
-          console.log('Rewriter stream completed');
         }
       } catch (error) {
         console.error(`Stream error for ${message.type}:`, error);
@@ -525,6 +608,20 @@ Continue writing from this text naturally and contextually: "${prompt}"`;
 
     port.onDisconnect.addListener(() => {
       console.log("AI stream port disconnected");
+      
+      // Abort all running streams when port disconnects
+      if (abortControllers.completion) {
+        abortControllers.completion.abort();
+        abortControllers.completion = null;
+      }
+      if (abortControllers.writer) {
+        abortControllers.writer.abort();
+        abortControllers.writer = null;
+      }
+      if (abortControllers.rewriter) {
+        abortControllers.rewriter.abort();
+        abortControllers.rewriter = null;
+      }
     });
   }
 });

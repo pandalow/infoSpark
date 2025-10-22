@@ -87,7 +87,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// When the content script loads, check if Copilot is enabled and initialize if so.
+        // When the content script loads, check if Copilot is enabled and initialize if so.
 function initializeCopilotIfEnabled() {
     setTimeout(() => {
         chrome.runtime.sendMessage({ type: 'GET_COPILOT_STATUS' }, (response) => {
@@ -131,14 +131,15 @@ window.addEventListener('load', () => {
 
 
 
+// Class responsible for managing the AI assistant's completion panel and interactions
 class CopilotWriter {
     constructor() {
         this.currentElement = null;
         this.completionPanel = null;
         this.currentCompletion = "";
         this.debounceTimer = null;
-        this.hideTimer = null; // 用于延迟隐藏面板
-        this.scrollTimer = null; // 用于滚动防抖
+    this.hideTimer = null; // used to delay hiding the panel
+    this.scrollTimer = null; // used for scroll debounce
         this.completionCache = new Map();
         this.isRequesting = false;
         this.mode = 'completion'; // 'completion' , 'writer', 'rewrite'
@@ -153,14 +154,14 @@ class CopilotWriter {
     }
 
     async init() {
-        await this.loadCompletionOptions(); // 加载配置
+    await this.loadCompletionOptions(); // load configuration
         this.initializePort(); // initialize the port for messaging
         this.createCompletionPanel(); // create the fixed panel
         this.setupGlobalEventListeners();
         console.log('CopilotWriter initialized');
     }
 
-    // 加载completion配置
+    // Load completion configuration
     async loadCompletionOptions() {
         try {
             const result = await new Promise(resolve => {
@@ -193,6 +194,11 @@ class CopilotWriter {
                 console.log('Completion cached:', this.currentCompletion);
             }
         }
+        if (msg.type === 'STREAM_ABORTED') {
+            console.log(`${this.mode} stream aborted by new request`);
+            this.isRequesting = false; // Reset request state
+            // Don't cache aborted results, just reset the state
+        }
         if (msg.type === 'STREAM_ERROR') {
             console.error(`${this.mode} stream error:`, msg.error);
             this.isRequesting = false; // Reset request state
@@ -200,7 +206,7 @@ class CopilotWriter {
         }
     }
 
-    // Creating the completion panel that follows the input  
+    // Create the completion panel that follows the input field
     createCompletionPanel() {
         // Creating the main container
         this.completionPanel = document.createElement('div');
@@ -253,7 +259,7 @@ class CopilotWriter {
             " onmouseover="this.style.background='rgba(255, 255, 255, 0.3)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.2)'">×</button>
         `;
 
-        // content area
+        // Content area setup
         const contentArea = document.createElement('div');
         contentArea.style.cssText = `
             padding: 16px;
@@ -261,7 +267,7 @@ class CopilotWriter {
             overflow-y: auto;
         `;
 
-        // Completion text area
+        // Completion text area setup
         this.completionText = document.createElement('div');
         this.completionText.id = 'copilot-completion-text';
         this.completionText.style.cssText = `
@@ -279,7 +285,7 @@ class CopilotWriter {
         `;
         this.completionText.textContent = 'Processing...';
 
-        // Buttons container
+        // Buttons container setup
         const buttonContainer = document.createElement('div');
         buttonContainer.style.cssText = `
             display: flex;
@@ -287,7 +293,7 @@ class CopilotWriter {
             margin-top: 12px;
         `;
 
-        // Creating the accept button
+        // Accept button setup
         const acceptButton = document.createElement('button');
         acceptButton.id = 'copilot-accept-btn';
         acceptButton.textContent = 'Accept';
@@ -313,7 +319,7 @@ class CopilotWriter {
             acceptButton.style.boxShadow = '0 4px 12px rgba(34, 197, 94, 0.3)';
         });
 
-        // Completion mode button
+        // Completion mode button setup
         const completionButton = document.createElement('button');
         completionButton.id = 'copilot-completion-btn';
         completionButton.textContent = 'Completion';
@@ -339,7 +345,7 @@ class CopilotWriter {
             completionButton.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
         });
 
-        // Rewrite button
+        // Rewrite button setup
         const rewriteButton = document.createElement('button');
         rewriteButton.id = 'copilot-rewrite-btn';
         rewriteButton.textContent = 'Rewrite';
@@ -365,7 +371,7 @@ class CopilotWriter {
             rewriteButton.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
         });
 
-        // Writer button
+        // Writer button setup
         const writerButton = document.createElement('button');
         writerButton.id = 'copilot-writer-btn';
         writerButton.textContent = 'Writer';
@@ -411,45 +417,45 @@ class CopilotWriter {
 
     // Setup panel events
     setupPanelEvents() {
-        // close button
+        // Close button event
         const closeBtn = document.getElementById('copilot-close-btn');
         closeBtn.addEventListener('click', () => {
             this.hideCompletionPanel();
         });
 
-        // Accept button
+        // Accept button event
         const acceptBtn = document.getElementById('copilot-accept-btn');
         acceptBtn.addEventListener('click', () => {
             this.acceptCompletion();
         });
 
-        // Completion mode button
+        // Completion mode button event
         const completionBtn = document.getElementById('copilot-completion-btn');
         completionBtn.addEventListener('click', () => {
             this.mode = 'completion';
-            // Switch to completion mode, hide panel if no content --- IGNORE ---
+            // Switch to completion mode, hide panel if no content
             if (!this.getTextContext().fullText.trim()) {
                 this.hideCompletionPanel();
             } else {
-                this.showCompletionPanel('等待补全内容...');
+                this.showCompletionPanel('Waiting for completion...');
             }
         });
 
-        // Rewrite button
+        // Rewrite button event
         const rewriteBtn = document.getElementById('copilot-rewrite-btn');
         rewriteBtn.addEventListener('click', () => {
             this.mode = 'rewrite';
             this.rewriteFullText();
         });
 
-        // Writer button
+        // Writer button event
         const writerBtn = document.getElementById('copilot-writer-btn');
         writerBtn.addEventListener('click', () => {
             this.mode = 'writer';
             this.getWriter();
         });
 
-        // Add hover effect
+        // Add hover effects
         [acceptBtn, rewriteBtn, writerBtn].forEach(btn => {
             btn.addEventListener('mouseenter', () => {
                 btn.style.opacity = '0.8';
@@ -476,7 +482,7 @@ class CopilotWriter {
         document.addEventListener('keydown', this.handleKeyDownBound);
         document.addEventListener('input', this.handleInputBound);
         document.addEventListener('click', this.handleClickBound);
-        window.addEventListener('scroll', this.handleScrollBound, true); // 使用捕获模式
+    window.addEventListener('scroll', this.handleScrollBound, true); // use capture mode
         window.addEventListener('resize', this.handleScrollBound);
     }
 
@@ -486,13 +492,13 @@ class CopilotWriter {
             this.currentElement = event.target;
             console.log('Focused on text input:', event.target.tagName);
 
-            // 清除任何待定的隐藏定时器
+            // clear any pending hide timer
             if (this.hideTimer) {
                 clearTimeout(this.hideTimer);
                 this.hideTimer = null;
             }
 
-            // 根据不同模式显示面板
+            // show panel depending on the current mode
             if (this.mode === 'completion') {
                 this.showCompletionPanel('Ready for text completion...');
                 // 如果有文本，则自动请求补全
@@ -501,7 +507,7 @@ class CopilotWriter {
                     this.showCompletionPanel('Waiting for completion...');
                 }
             } else if (this.mode === 'writer' || this.mode === 'rewrite') {
-                // Writer和Rewrite模式下，如果面板已经显示则保持，否则显示准备状态
+                // In writer and rewrite modes: keep the panel visible if already shown, otherwise show a ready state
                 if (this.completionPanel.style.display === 'none') {
                     this.showCompletionPanel(`${this.mode === 'writer' ? 'Writer' : 'Rewrite'} Mode is Ready.`);
                 }
@@ -510,20 +516,20 @@ class CopilotWriter {
     }
 
     handleFocusOut(event) {
-        // 只有在失去焦点的目标不是文本输入框，且不是面板内的元素时才隐藏
+        // Only hide when the newly focused element is not a text input and not inside the panel
         if (this.mode === 'completion' && 
             this.completionPanel && 
             !this.completionPanel.contains(event.target) &&
             !this.isTextInput(event.relatedTarget)) {
             
-            // 清除之前的定时器
+            // clear any previous hide timer
             if (this.hideTimer) {
                 clearTimeout(this.hideTimer);
             }
             
-            // Delay hiding to allow click events on panel
+            // Delay hiding to allow click events on the panel
             this.hideTimer = setTimeout(() => {
-                // 检查当前是否仍然有活跃的文本输入框，且面板不在hover状态
+                // Check that there is no active text input and the panel is not hovered
                 if (!this.completionPanel.matches(':hover') && 
                     (!document.activeElement || !this.isTextInput(document.activeElement))) {
                     this.hideCompletionPanel();
@@ -579,18 +585,19 @@ class CopilotWriter {
     }
 
     handleScroll(event) {
-        // 当页面滚动或窗口大小改变时，重新定位面板
+        // Reposition the panel when the page scrolls or the window resizes
         if (this.completionPanel && 
             this.completionPanel.style.display === 'block' && 
             this.currentElement) {
             
             // 使用防抖来避免频繁重新定位
+            // use debounce to avoid frequent repositioning
             if (this.scrollTimer) {
                 clearTimeout(this.scrollTimer);
             }
             
             this.scrollTimer = setTimeout(() => {
-                // 检查当前元素是否仍然在视口中可见
+                // Check whether the current element is still visible in the viewport
                 const rect = this.currentElement.getBoundingClientRect();
                 const isVisible = rect.top >= 0 && 
                                 rect.left >= 0 && 
@@ -601,6 +608,7 @@ class CopilotWriter {
                     this.positionPanel();
                 } else {
                     // 如果输入框不在视口中，隐藏面板
+                    // hide the panel if the input is no longer visible
                     this.hideCompletionPanel();
                 }
                 this.scrollTimer = null;
@@ -824,26 +832,18 @@ class CopilotWriter {
         console.log('CopilotWriter destroyed');
     }
 
-
-    
-
-    // Cancel current request
+    // Cancel current request - Legacy method kept for potential manual cancellation needs
+    // Note: With AbortController implementation, stream interruption is handled automatically 
+    // by the backend when new requests arrive. This method mainly resets local state.
     cancelCurrentRequest() {
         if (this.isRequesting) {
+            console.log('Manually cancelling current request - resetting local state');
             this.isRequesting = false;
             this.currentCompletion = '';
-
-            // If there is an active port connection, disconnect it to stop streaming
-            if (this.port) {
-                try {
-                    this.port.disconnect();
-                } catch (error) {
-                    console.log('Port already disconnected:', error);
-                }
-                this.port = null;
-            }
-
-            console.log('Current request cancelled');
+            this.showCompletionPanel('Request cancelled');
+            
+            // Note: We don't disconnect the port since backend handles 
+            // stream abortion with AbortController. The port stays alive for new requests.
         }
     }
 
@@ -880,19 +880,20 @@ class CopilotWriter {
         }
 
         this.isRequesting = true;
-        this.currentCompletion = '';
+        this.currentCompletion = ''; // Clear previous completion immediately
 
         // Show loading state
         this.showCompletionPanel('Loading...');
-        console.log('Sending completion request, text content:', context.fullText.substring(0, 100));
+        console.log('Starting new completion request, text content:', context.fullText.substring(0, 100));
         
         try {
-            // 确保端口已初始化
+            // Ensure port is initialized
             if (!this.port) {
                 await this.initializePort();
             }
             
-            // 发送流式请求 - 传递完整的上下文信息
+            // Send streaming request - pass complete context information
+            // Note: If there's a previous stream running, background.js will abort it automatically
             await this.sendCompletionRequest(context);
             
         } catch (error) {
@@ -904,17 +905,13 @@ class CopilotWriter {
 
     // Writer connection and streaming
     async getWriter() {
-        if (this.isRequesting) {
-            console.log('Cancelling current request to start Writer');
-            this.cancelCurrentRequest();
-        }
-
+        // No need to manually cancel - backend AbortController handles stream interruption
         this.mode = 'writer';
         this.currentCompletion = '';
         this.isRequesting = true;
         this.showCompletionPanel('Generating content with Writer...');
 
-        console.log('Sending WRITER_STREAM message, port:', this.port);
+        console.log('Starting writer stream');
 
         try {
             if (!this.port) {
@@ -946,11 +943,7 @@ class CopilotWriter {
 
     // Full text rewrite connection and streaming
     async rewriteFullText() {
-        if (this.isRequesting) {
-            console.log('Cancelling current request to start Rewriter');
-            this.cancelCurrentRequest();
-        }
-
+        // No need to manually cancel - backend AbortController handles stream interruption
         this.mode = 'rewrite';
         this.currentCompletion = '';
         this.isRequesting = true;
@@ -1122,16 +1115,16 @@ class CopilotWriter {
         if (!this.currentElement) return '';
 
         try {
-            // Find the closest paragraph element
+            // Try to find the nearest semantic container for paragraph context
             let contextElement = this.currentElement.closest('p, div, section, article, main');
             
-            // If no paragraph found, try parent element
+            // Fallback to parent element if no semantic container is found
             if (!contextElement) {
                 contextElement = this.currentElement.parentElement;
             }
             
             if (contextElement) {
-                // Get paragraph text, excluding current input content
+                // Extract paragraph text and exclude the current input's content
                 const paragraphText = this.getCleanText(contextElement);
                 return paragraphText;
             }
