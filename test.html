@@ -3,138 +3,319 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Copilot Web Test Page</title>
+    <title>InfoSpark AI Assistant - Job Application Testing Platform</title>
+    <meta name="description" content="AI-powered job application assistance for cover letters, resumes, and professional correspondence">
     <style>
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            max-width: 800px;
-            margin: 40px auto;
+            max-width: 900px;
+            margin: 0 auto;
             padding: 20px;
             line-height: 1.6;
-        }
-        
-        .test-section {
-            margin: 30px 0;
-            padding: 20px;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            background: #f9f9f9;
-        }
-        
-        h1, h2 {
+            background: #f8f9fa;
             color: #333;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2em;
+            margin: 0;
+            font-weight: 600;
+        }
+        
+        .subtitle {
+            color: #6c757d;
+            font-size: 1.1em;
+            margin-top: 8px;
+        }
+        
+        .section {
+            margin: 25px 0;
+            padding: 20px;
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+            background: #f8f9fa;
+        }
+        
+        .job-context {
+            border-left-color: #28a745;
+        }
+        
+        .company-info {
+            border-left-color: #fd7e14;
+        }
+        
+        .requirements {
+            border-left-color: #6f42c1;
+        }
+        
+        .application-section {
+            border-left-color: #007bff;
+            background: white;
+            border: 1px solid #dee2e6;
+        }
+        
+        .section-title {
+            color: #495057;
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            margin-top: 0;
         }
         
         textarea, input {
             width: 100%;
             padding: 12px;
-            border: 1px solid #ddd;
+            border: 1px solid #ced4da;
             border-radius: 4px;
             font-size: 14px;
-            font-family: monospace;
+            font-family: Georgia, serif;
             margin: 10px 0;
+            transition: border-color 0.2s;
+        }
+        
+        textarea:focus, input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
         }
         
         textarea {
-            height: 120px;
+            height: 180px;
             resize: vertical;
         }
         
-        .contenteditable {
-            border: 1px solid #ddd;
-            padding: 12px;
-            min-height: 100px;
-            border-radius: 4px;
-            background: white;
-            font-family: monospace;
+        .skills-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 15px 0;
         }
         
-        .instructions {
-            background: #e3f2fd;
-            padding: 15px;
-            border-radius: 4px;
-            margin: 20px 0;
-        }
-        
-        .code-example {
-            background: #263238;
-            color: #fff;
-            padding: 15px;
-            border-radius: 4px;
-            font-family: monospace;
+        .skill-tag {
+            background: #e9ecef;
+            color: #495057;
+            padding: 4px 10px;
+            border-radius: 12px;
             font-size: 13px;
-            overflow-x: auto;
+            border: 1px solid #dee2e6;
+        }
+        
+        .tips {
+            background: #e7f3ff;
+            border: 1px solid #b3d7ff;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        
+        .tips h4 {
+            margin-top: 0;
+            color: #0056b3;
+        }
+        
+        .instruction {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        
+        ul, ol {
+            padding-left: 20px;
+        }
+        
+        li {
+            margin: 5px 0;
+        }
+        
+        strong {
+            color: #495057;
+        }
+        
+        label {
+            font-weight: 600;
+            color: #495057;
+            display: block;
+            margin-top: 20px;
+            margin-bottom: 5px;
         }
     </style>
 </head>
 <body>
-    <h1>InfoSpark Copilot Web Auto-completion Test</h1>
-    
-    <div class="instructions">
-        <h3>📖 Instructions</h3>
-        <ol>
-            <li>Ensure the Copilot Web extension is installed</li>
-            <li><strong>Click the extension icon to open the side panel</strong> - Check AI status and diagnostics</li>
-            <li>Enter text in the input fields below</li>
-            <li>Wait for Copilot panel to appear</li>
-            <li>Press <kbd>Tab</kbd> to accept suggestions, or <kbd>Esc</kbd> to dismiss</li>
-        </ol>
-        
-        <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin: 12px 0;">
-            <strong>⚠️ Important Note</strong>: If the signal is red, it means that you should click the extension icon to open the side panel for detailed diagnostics and solutions.
-        </div>
-    </div>
-
-    <div class="test-section">
-        <h2>📝 Text Area Test</h2>
-        <p>Try entering code or text in this text box:</p>
-        <textarea placeholder="Enter some code or text here, for example:
-function hello() {
-    console.log(
-// Wait for AI to complete..."></textarea>
-    </div>
-
-    <div class="test-section">
-        <h2>📧 Input Field Test</h2>
-        <p>Email Subject:</p>
-        <input type="text" placeholder="Enter an email subject, e.g., Re: Project Progress">
-        
-        <p>Search Box:</p>
-        <input type="search" placeholder="Search content, e.g., How to in JavaScript">
-    </div>
-
-    <div class="test-section">
-        <h2>✏️ Rich Text Editor Test</h2>
-        <p>Editable Area:</p>
-        <div class="contenteditable" contenteditable="true">
-Enter content here to test the auto-completion functionality of contenteditable elements...
-        </div>
-    </div>
-
-    <div class="test-section">
-        <h2>🧪 Code Examples</h2>
-        <p>Try entering these code snippets to test AI completion:</p>
-        
-        <div class="code-example">
-// JavaScript Example
-function calculateTotal(items) {
-    return items.reduce((sum, item) => 
-
-// React Example  
-const MyComponent = ({ data }) => {
-    const [state, setState] = useState(
-
-// Python Example
-def process_data(data):
-    filtered_data = [item for item in data if 
-
-// CSS Example
-.container {
-    display: flex;
-    justify-content:
+    <div class="container">
+        <div class="header">
+            <h1>Job Application AI Assistant</h1>
+            <div class="subtitle">AI-Powered Cover Letter and Application Writing</div>
         </div>
         
-        <textarea placeholder="Paste the above code snippets here and continue typing..."></textarea>
+        <!-- Job Posting Context -->
+        <div class="job-context">
+            <div class="section-title">Senior Frontend Developer Position</div>
+            <p><strong>Location:</strong> San Francisco, CA (Hybrid) | <strong>Salary:</strong> $120,000 - $180,000</p>
+            <p><strong>Posted:</strong> October 2024 | <strong>Application Deadline:</strong> November 15, 2024</p>
+            
+            <h4>Job Description:</h4>
+            <p>We are seeking a talented Senior Frontend Developer to join our innovative team at TechVision Inc. You will be responsible for developing cutting-edge user interfaces using modern JavaScript frameworks, collaborating with cross-functional teams, and mentoring junior developers. This role offers the opportunity to work on high-impact projects that reach millions of users worldwide.</p>
+            
+            <h4>What You'll Do:</h4>
+            <ul>
+                <li>Build responsive, accessible web applications using React, TypeScript, and modern CSS</li>
+                <li>Collaborate with designers and backend engineers to implement pixel-perfect UI/UX</li>
+                <li>Optimize application performance and ensure cross-browser compatibility</li>
+                <li>Mentor junior developers and contribute to technical architecture decisions</li>
+                <li>Participate in code reviews and maintain high code quality standards</li>
+            </ul>
+        </div>
+
+        <!-- Company Information -->
+        <div class="company-info">
+            <div class="section-title">About TechVision Inc.</div>
+            <p><strong>Industry:</strong> SaaS Technology | <strong>Size:</strong> 200-500 employees | <strong>Founded:</strong> 2018</p>
+            
+            <h4>Company Mission:</h4>
+            <p>TechVision Inc. is revolutionizing how businesses manage their digital workflows through innovative cloud-based solutions. We're committed to creating intuitive, powerful tools that help our clients increase productivity and drive growth.</p>
+            
+            <h4>Company Culture & Values:</h4>
+            <ul>
+                <li><strong>Innovation First:</strong> We encourage creative thinking and embrace new technologies</li>
+                <li><strong>Collaborative Spirit:</strong> Cross-functional teamwork is at the heart of everything we do</li>
+                <li><strong>Work-Life Balance:</strong> Flexible schedules, remote work options, and comprehensive benefits</li>
+                <li><strong>Continuous Learning:</strong> $3,000 annual learning budget and conference attendance</li>
+                <li><strong>Diversity & Inclusion:</strong> Building an inclusive environment where everyone can thrive</li>
+            </ul>
+            
+            <h4>Recent Achievements:</h4>
+            <p>🏆 Named "Best SaaS Startup 2024" by TechCrunch | 📈 300% revenue growth in the past year | 🌟 4.8/5 employee satisfaction rating on Glassdoor</p>
+        </div>
+
+        <!-- Requirements and Qualifications -->
+        <div class="requirements">
+            <div class="section-title">Required Qualifications</div>
+            
+            <h4>Technical Skills:</h4>
+            <div class="skills-list">
+                <div class="skill-tag">React.js (5+ years)</div>
+                <div class="skill-tag">TypeScript</div>
+                <div class="skill-tag">JavaScript ES6+</div>
+                <div class="skill-tag">HTML5 & CSS3</div>
+                <div class="skill-tag">Redux/Context API</div>
+                <div class="skill-tag">REST APIs</div>
+                <div class="skill-tag">Git Version Control</div>
+                <div class="skill-tag">Webpack/Vite</div>
+                <div class="skill-tag">Testing (Jest/Cypress)</div>
+                <div class="skill-tag">Responsive Design</div>
+            </div>
+            
+            <h4>Experience Requirements:</h4>
+            <ul>
+                <li>5+ years of frontend development experience</li>
+                <li>2+ years in a senior or lead developer role</li>
+                <li>Experience with agile development methodologies</li>
+                <li>Strong understanding of web performance optimization</li>
+                <li>Experience mentoring junior developers</li>
+            </ul>
+            
+            <h4>Preferred Qualifications:</h4>
+            <ul>
+                <li>Experience with Node.js and full-stack development</li>
+                <li>Knowledge of cloud platforms (AWS, Azure, or GCP)</li>
+                <li>Experience with GraphQL and modern state management</li>
+                <li>Understanding of accessibility standards (WCAG)</li>
+                <li>Bachelor's degree in Computer Science or related field</li>
+            </ul>
+        </div>
+
+        <!-- Application Writing Section -->
+        <div class="application-section">
+            <div class="section-title">Write Your Cover Letter</div>
+            
+            <div class="instruction">
+                <strong>💡 AI Writing Tips:</strong> Start typing your cover letter below. The AI will help you craft professional, compelling content based on the job context above. Mention specific skills, align with company values, and demonstrate your enthusiasm for the role.
+            </div>
+            
+            <div class="tips">
+                <h4>🎯 Cover Letter Best Practices:</h4>
+                <ul>
+                    <li><span class="highlight">Personalization:</span> Address the hiring manager by name if possible</li>
+                    <li><span class="highlight">Value Proposition:</span> Clearly state what unique value you bring</li>
+                    <li><span class="highlight">Specific Examples:</span> Use concrete achievements and metrics</li>
+                    <li><span class="highlight">Company Research:</span> Reference specific company values, products, or recent news</li>
+                    <li><span class="highlight">Call to Action:</span> End with enthusiasm and next steps</li>
+                </ul>
+            </div>
+            
+            <label for="cover-letter"><strong>Cover Letter:</strong></label>
+            <textarea id="cover-letter" placeholder="Dear Hiring Manager,
+
+I am writing to express my strong interest in the Senior Frontend Developer position at TechVision Inc. With over 6 years of experience in frontend development and a passion for creating exceptional user experiences, I am excited about the opportunity to contribute to your innovative team.
+
+[Continue writing here - the AI will help you craft compelling content based on the job requirements and company information above...]
+
+Throughout my career, I have...
+
+I am particularly drawn to TechVision Inc. because...
+
+I would welcome the opportunity to discuss how my experience in [specific skills] and passion for [relevant area] can contribute to your team's success.
+
+Thank you for your consideration.
+
+Best regards,
+[Your Name]"></textarea>
+            
+            <label for="email-subject"><strong>Email Subject Line:</strong></label>
+            <input type="text" id="email-subject" placeholder="Application for Senior Frontend Developer Position - [Your Name]">
+            
+            <label for="linkedin-message"><strong>LinkedIn Connection Message:</strong></label>
+            <textarea id="linkedin-message" style="height: 120px;" placeholder="Hi [Hiring Manager/Recruiter Name],
+
+I recently applied for the Senior Frontend Developer position at TechVision Inc. and wanted to connect with you directly. I'm very excited about the opportunity to contribute to your team's innovative work in...
+
+[The AI will help you craft a professional connection message]"></textarea>
+            
+            <div class="tips">
+                <h4>🔧 Testing Scenarios:</h4>
+                <ul>
+                    <li><strong>Skill Matching:</strong> Type "My experience with React" and see AI suggest relevant details</li>
+                    <li><strong>Company Values:</strong> Type "I'm drawn to TechVision because" for value-aligned responses</li>
+                    <li><strong>Achievement Examples:</strong> Type "In my previous role, I" for quantifiable accomplishments</li>
+                    <li><strong>Closing Statements:</strong> Type "I would welcome the opportunity" for professional endings</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Additional Context for AI -->
+        <div style="background: #f5f5f5; padding: 20px; border-radius: 10px; margin-top: 30px;">
+            <h4>📝 Context Information for AI Assistant:</h4>
+            <p><em>This page contains comprehensive job application context including:</em></p>
+            <ul style="font-size: 14px; color: #666;">
+                <li>Detailed job description and responsibilities</li>
+                <li>Company background, culture, and values</li>
+                <li>Required and preferred qualifications</li>
+                <li>Industry context and company achievements</li>
+                <li>Specific technical skills and experience requirements</li>
+            </ul>
+            <p><em>The AI should use this context to provide relevant, personalized suggestions for cover letters and professional correspondence.</em></p>
+        </div>
     </div>
 </body>
 </html>

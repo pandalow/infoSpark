@@ -330,12 +330,12 @@ async function createCompletionSession() {
     const initialPrompts = [
       {
         role: 'system',
-        content: "You are a smart writing assistant. When given text, continue it naturally with 1-2 relevant sentences. Be concise, contextual, and helpful. Only provide the continuation, not the original text."
+        content: "You are a precise writing assistant. When given text, continue it with ONLY the next logical sentence or phrase. Rules: 1) Complete the current thought if it's incomplete, 2) Add only 1 sentence if the thought is complete, 3) Never write multiple paragraphs, 4) Stop at the first natural sentence ending, 5) Be contextually relevant and concise."
       }
     ];
     return await LanguageModel.create({
       initialPrompts,
-      temperature: 0.8,
+      temperature: 0.6,
       topK: 3,
       monitor(m) {
         m.addEventListener('downloadprogress', (e) => {
@@ -461,7 +461,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 
               completionPrompt = `Based on this paragraph context: "${truncatedContext}"
 
-Continue writing from this text naturally and concisely: "${prompt}"`;
+Complete the following text with just the next logical sentence or phrase: "${prompt}"`;
               
               console.log('Using paragraph context, length:', contextToUse.length);
               
@@ -482,13 +482,13 @@ Continue writing from this text naturally and concisely: "${prompt}"`;
               
               completionPrompt = `Based on this page context (${metadata?.contentType || 'general'} content, title: "${metadata?.title || 'Unknown'}"): "${truncatedContext}"
 
-Continue writing from this text naturally and contextually: "${prompt}"`;
+Complete the following text with just the next logical sentence or phrase: "${prompt}"`;
               
               console.log('Using full page context, original length:', contextToUse.length, 'truncated length:', truncatedContext.length);
             }
           } else {
             // No context mode - use only the current input
-            completionPrompt = `Continue writing from this text naturally and concisely: "${prompt}"`;
+            completionPrompt = `Complete the following text with just the next logical sentence or phrase: "${prompt}"`;
             console.log('Using no context mode');
           }
           
@@ -497,11 +497,49 @@ Continue writing from this text naturally and contextually: "${prompt}"`;
               signal: abortControllers.completion.signal
             });
             
+            let accumulatedText = '';
+            let sentenceCount = 0;
+            let shouldStop = false;
+            
             for await (const chunk of stream) {
+              if (shouldStop) break;
+              
+              accumulatedText += chunk;
+              
+              // Count sentences by looking for sentence-ending punctuation
+              const sentences = accumulatedText.match(/[.!?]+/g);
+              const currentSentenceCount = sentences ? sentences.length : 0;
+              
+              // Stop conditions:
+              // 1. After 1-2 complete sentences
+              // 2. If we've accumulated too much text (150+ chars)
+              // 3. If we see paragraph breaks or multiple line breaks
+              if (currentSentenceCount >= 2 || 
+                  accumulatedText.length > 150 ||
+                  accumulatedText.includes('\n\n') ||
+                  accumulatedText.match(/\n.*\n/)) {
+                shouldStop = true;
+                
+                // Trim to just complete sentences
+                const sentenceEndMatch = accumulatedText.match(/^.*?[.!?]+/);
+                if (sentenceEndMatch) {
+                  const trimmedChunk = sentenceEndMatch[0];
+                  if (trimmedChunk !== accumulatedText) {
+                    // Send only the complete sentence part
+                    const finalChunk = trimmedChunk.substring(accumulatedText.length - chunk.length);
+                    if (finalChunk) {
+                      port.postMessage({ type: "STREAM_CHUNK", data: { chunk: finalChunk } });
+                    }
+                    break;
+                  }
+                }
+              }
+              
               port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
             }
+            
             port.postMessage({ type: "STREAM_END" });
-            console.log('Completion stream completed');
+            console.log('Completion stream completed with length:', accumulatedText.length);
             
             // Clear the controller after successful completion
             abortControllers.completion = null;
