@@ -141,6 +141,8 @@ class CopilotWriter {
     this.hideTimer = null; // used to delay hiding the panel
     this.scrollTimer = null; // used for scroll debounce
         this.completionCache = new Map();
+        this.cacheMaxSize = 50; // Maximum cache entries
+        this.cacheCleanupThreshold = 40; // Start cleanup when cache reaches this size
         this.isRequesting = false;
         this.mode = 'completion'; // 'completion' , 'writer', 'rewrite'
         this.port = null; // port for messaging with background
@@ -232,13 +234,15 @@ class CopilotWriter {
         titleBar.style.cssText = `
             background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
             color: white;
-            padding: 12px 16px;
+            padding: 8px 12px;
             font-weight: 600;
-            border-radius: 16px 16px 0 0;
+            border-radius: 12px 12px 0 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 14px;
+            font-size: 13px;
+            height: 36px;
+            box-sizing: border-box;
         `;
         titleBar.innerHTML = `
             <span>InfoSpark AI Assistant</span>
@@ -247,11 +251,11 @@ class CopilotWriter {
                 border: none;
                 color: white;
                 cursor: pointer;
-                font-size: 14px;
-                padding: 4px 8px;
-                width: 24px;
-                height: 24px;
-                border-radius: 6px;
+                font-size: 12px;
+                padding: 2px 4px;
+                width: 20px;
+                height: 20px;
+                border-radius: 4px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -489,6 +493,12 @@ class CopilotWriter {
     // Event handler methods
     handleFocusIn(event) {
         if (this.isTextInput(event.target)) {
+            // If switching to a different input element, clear relevant cache
+            if (this.currentElement && this.currentElement !== event.target) {
+                console.log('Switching input elements, clearing cache');
+                this.clearRelevantCache();
+            }
+            
             this.currentElement = event.target;
             console.log('Focused on text input:', event.target.tagName);
 
@@ -501,7 +511,7 @@ class CopilotWriter {
             // show panel depending on the current mode
             if (this.mode === 'completion') {
                 this.showCompletionPanel('Ready for text completion...');
-                // 如果有文本，则自动请求补全
+                // Auto request completion if text exists
                 const text = this.getTextContext().fullText.trim();
                 if (text) {
                     this.showCompletionPanel('Waiting for completion...');
@@ -562,6 +572,12 @@ class CopilotWriter {
             return;
         }
 
+        // Clear cache when input changes to prevent stale completions
+        if (this.completionCache.size > 0) {
+            console.log('Input changed, clearing relevant cache entries');
+            this.clearRelevantCache();
+        }
+
         if (this.debounceTimer) {
             clearTimeout(this.debounceTimer);
         }
@@ -590,7 +606,6 @@ class CopilotWriter {
             this.completionPanel.style.display === 'block' && 
             this.currentElement) {
             
-            // 使用防抖来避免频繁重新定位
             // use debounce to avoid frequent repositioning
             if (this.scrollTimer) {
                 clearTimeout(this.scrollTimer);
@@ -607,7 +622,6 @@ class CopilotWriter {
                 if (isVisible) {
                     this.positionPanel();
                 } else {
-                    // 如果输入框不在视口中，隐藏面板
                     // hide the panel if the input is no longer visible
                     this.hideCompletionPanel();
                 }
@@ -832,7 +846,38 @@ class CopilotWriter {
         console.log('CopilotWriter destroyed');
     }
 
-    // Cancel current request - Legacy method kept for potential manual cancellation needs
+    // Clear cache entries related to current element and context
+    clearRelevantCache() {
+        if (!this.currentElement) return;
+        
+        const currentElementId = this.generateElementId(this.currentElement);
+        const keysToDelete = [];
+        
+        for (const [key] of this.completionCache) {
+            // Remove cache entries that might be related to current context
+            if (key.includes(currentElementId) || key.includes(this.mode)) {
+                keysToDelete.push(key);
+            }
+        }
+        
+        keysToDelete.forEach(key => {
+            this.completionCache.delete(key);
+            console.log('Removed stale cache entry:', key.substring(0, 50) + '...');
+        });
+    }
+
+    // Generate a unique identifier for the current element
+    generateElementId(element) {
+        if (!element) return 'unknown';
+        
+        // Create a unique identifier based on element properties
+        const tag = element.tagName.toLowerCase();
+        const id = element.id || '';
+        const className = element.className || '';
+        const placeholder = element.placeholder || '';
+        
+        return `${tag}_${id}_${className}_${placeholder}`.replace(/\s+/g, '_');
+    }
     // Note: With AbortController implementation, stream interruption is handled automatically 
     // by the backend when new requests arrive. This method mainly resets local state.
     cancelCurrentRequest() {
@@ -859,24 +904,28 @@ class CopilotWriter {
         if (!fullText) {
             console.log('Request skipped: empty input');
             this.hideCompletionPanel();
+            // Clear any cached completions for empty input
+            this.clearRelevantCache();
             return;
         }
 
         // Check cache
         const cacheKey = this.generateCacheKey(context);
+        console.log('Generated cache key:', cacheKey);
+        
         if (this.completionCache.has(cacheKey)) {
             const cachedCompletion = this.completionCache.get(cacheKey);
             this.currentCompletion = cachedCompletion;
             this.showCompletionPanel(cachedCompletion);
-            console.log('Using cached completion');
+            console.log('Using cached completion for key:', cacheKey.substring(0, 50) + '...');
             return;
         }
 
-        // Queue management
-        if (this.completionCache.size >= 50) {
-            console.log('Cache is full, removing oldest entry');
-            const firstKey = this.completionCache.keys().next().value;
-            this.completionCache.delete(firstKey);
+        // Cache management with better cleanup
+        if (this.completionCache.size >= this.cacheCleanupThreshold) {
+            console.log('Cache cleanup: removing oldest entries');
+            const keysToDelete = Array.from(this.completionCache.keys()).slice(0, this.completionCache.size - this.cacheCleanupThreshold + 10);
+            keysToDelete.forEach(key => this.completionCache.delete(key));
         }
 
         this.isRequesting = true;
@@ -885,6 +934,12 @@ class CopilotWriter {
         // Show loading state
         this.showCompletionPanel('Loading...');
         console.log('Starting new completion request, text content:', context.fullText.substring(0, 100));
+        console.log('Context info:', {
+            fullTextLength: context.fullText.length,
+            paragraphTextLength: context.paragraphText.length,
+            fullPageTextLength: context.fullPageText.length,
+            contextLevel: this.completionOptions.contextLevel
+        });
         
         try {
             // Ensure port is initialized
@@ -1046,17 +1101,30 @@ class CopilotWriter {
     generateCacheKey(context) {
         const text = context.fullText.trim();
         
+        // Include current element identifier to avoid cross-element cache conflicts
+        const elementId = this.generateElementId(this.currentElement);
+        
         // Select the appropriate context text based on the current level
         let contextText = '';
         if (this.completionOptions.contextLevel === 'paragraph') {
             contextText = context.paragraphText || '';
         } else if (this.completionOptions.contextLevel === 'fullpage') {
-            contextText = context.fullPageText || '';
+            // Limit fullpage context to avoid including too much irrelevant data
+            contextText = (context.fullPageText || '').substring(0, 2000);
         }
+        
+        // Create a more specific cache key that includes:
+        // - Current text content
+        // - Element identifier  
+        // - Context level
+        // - Relevant context text
+        // - Timestamp to ensure freshness (rounded to 5-minute intervals)
+        const timeWindow = Math.floor(Date.now() / (5 * 60 * 1000)); // 5-minute windows
         
         const combinedText = text + contextText;
         const textHash = this.simpleHash(combinedText);
-        return `${this.mode}_${this.completionOptions.contextLevel}_${textHash}_${combinedText.length}`;
+        
+        return `${this.mode}_${elementId}_${this.completionOptions.contextLevel}_${textHash}_${combinedText.length}_${timeWindow}`;
     }
 
     simpleHash(str) {
@@ -1168,17 +1236,29 @@ class CopilotWriter {
         // Clone element to avoid modifying original DOM
         const clone = element.cloneNode(true);
 
-        // Remove unwanted elements
+        // Remove unwanted elements including input fields to avoid capturing old input values
         const unwantedSelectors = [
             'script', 'style', 'noscript', 'iframe', 'embed', 'object',
             'nav', 'header', 'footer', 'aside', '.advertisement', '.ad',
-            'input', 'textarea', 'button', 'select'
+            'input', 'textarea', 'button', 'select',
+            // Remove completion panel if it exists
+            '#copilot-completion-panel'
         ];
 
         unwantedSelectors.forEach(selector => {
             const elements = clone.querySelectorAll(selector);
             elements.forEach(el => el.remove());
         });
+
+        // Also remove the current input element from context to avoid self-reference
+        if (this.currentElement && clone.contains(this.currentElement)) {
+            const currentElementClone = clone.querySelector(this.currentElement.tagName.toLowerCase() + 
+                (this.currentElement.id ? `#${this.currentElement.id}` : '') +
+                (this.currentElement.className ? `.${this.currentElement.className.split(' ').join('.')}` : ''));
+            if (currentElementClone) {
+                currentElementClone.remove();
+            }
+        }
 
         // Get text and clean it
         let text = clone.textContent || clone.innerText || '';
