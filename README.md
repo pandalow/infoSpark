@@ -280,10 +280,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🌐 Resources & Documentation
 
 - **[Chrome AI Documentation](https://developer.chrome.com/docs/ai/)**
-- **[Extension Architecture Guide](docs/ARCHITECTURE.md)**
-- **[API Reference](docs/API.md)**
-- **[Contributing Guide](CONTRIBUTING.md)**
-
 ---
 
 **🚀 Empowering intelligent writing with local AI excellence!**
