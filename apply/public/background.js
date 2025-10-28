@@ -7,660 +7,534 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
   }
 });
 
+// =============================================================================
+// MESSAGE HANDLING
+// =============================================================================
+class MessageHandler {
+  constructor(stateManager, sessionManager) {
+    this.stateManager = stateManager;
+    this.sessionManager = sessionManager;
+    this.setupListeners();
+  }
 
-class MessageManager {
+  setupListeners() {
+    const handlers = {
+      'CHAT_WITH_AI': this.handleChat.bind(this),
+      'CHECK_STATUS': this.checkAvailability.bind(this),
+      'GET_COPILOT_STATUS': this.getCopilotStatus.bind(this),
+      'CREATE_COMPLETION_SESSION': this.createCompletionSession.bind(this),
+      'RESET_SESSION': this.resetSession.bind(this),
+      'UPDATE_COMPLETION_OPTIONS': this.updateCompletionOptions.bind(this),
+      'UPDATE_CHAT_CONTEXT': this.updateChatContext.bind(this),
+    };
+
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      const handler = handlers[message.type];
+      if (handler) {
+        handler(message.data, sender)
+          .then(result => sendResponse({ success: true, data: result }))
+          .catch(error => sendResponse({ success: false, error: error.message }));
+        return true;
+      } else {
+        sendResponse({ success: false, error: "Unknown message type" });
+      }
+    });
+  }
+
+  async handleChat(data) {
+    const { message, chatHistory } = data;
+    const pageText = await this.sessionManager.getStorageValue('pageTextSnapshot') || '';
+
+    await this.sessionManager.createPromptSession();
+
+    let fullPrompt = '';
+    if (pageText) fullPrompt += `Context from page:\n${pageText}\n\n`;
+
+    if (chatHistory?.length > 0) {
+      const historyText = chatHistory.slice(-8).map(msg =>
+        `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
+      ).join('\n');
+      fullPrompt += `${historyText}\nUser: ${message}`;
+    } else {
+      fullPrompt += message;
+    }
+
+    const response = await this.sessionManager.sessions.prompt.prompt(fullPrompt);
+    return { response: response.trim(), timestamp: Date.now() };
+  }
+
+  async checkAvailability() {
+    const [promptAvailability, writerAvailability, rewriterAvailability] = await Promise.all([
+      LanguageModel.availability(),
+      Writer.availability(),
+      Rewriter.availability()
+    ]);
+
+    return {
+      prompt: promptAvailability,
+      writer: writerAvailability,
+      rewriter: rewriterAvailability
+    };
+  }
+
+  async getCopilotStatus() {
+    if (!this.stateManager.isInitialized) {
+      await this.stateManager.load();
+    }
+    return { isEnabled: this.stateManager.copilotState.isEnabled };
+  }
+
+  async createCompletionSession() {
+    await this.sessionManager.createCompletionSession();
+    await this.sessionManager.createPromptSession();
+
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]) {
+      await this.stateManager.enableCopilot(tabs[0].id);
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'INIT_COPILOT_WRITER' });
+    }
+    return true;
+  }
+
+  async resetSession() {
+    this.sessionManager.destroyAllExcept('prompt');
+    await this.stateManager.disableCopilot();
+
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'DESTROY_COPILOT_WRITER' });
+    }
+    return true;
+  }
+
+  async updateCompletionOptions() {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'UPDATE_COMPLETION_OPTIONS' });
+    }
+    return true;
+  }
+
+  async updateChatContext() {
+    this.sessionManager.destroy('prompt');
+    await this.sessionManager.createPromptSession();
+    return true;
+  }
+}
+
+// =============================================================================
+// STATE MANAGEMENT
+// =============================================================================
+class StateManager {
   /**
-   * Manages message passing between different parts of the extension.
+   * Manages the state of the Copilot feature.
+   * @constructor
+   * @param {Object} initialState - The initial state of the Copilot feature.
+   */
+  constructor() {
+    this.copilotState = {
+      isEnabled: false,
+      activeTabId: null
+    };
+  }
+  async save() {
+    try {
+      await chrome.storage.local.set({ copilotState: this.copilotState });
+    } catch (error) {
+      console.error('Failed to save copilot state:', error);
+    }
+  }
+  async load() {
+    try {
+      const result = await chrome.storage.local.get(['copilotState']);
+      if (result.copilotState) {
+        this.copilotState = { ...this.copilotState, ...result.copilotState };
+      }
+    } catch (error) {
+      console.error('Failed to load copilot state:', error);
+    }
+  }
+
+  async enableCopilot(tabId) {
+    this.copilotState.isEnabled = true;
+    this.copilotState.activeTabId = tabId;
+    await this.save();
+  }
+  async disableCopilot() {
+    this.copilotState.isEnabled = false;
+    this.copilotState.activeTabId = null;
+    await this.save();
+  }
+}
+
+// =============================================================================
+// SESSION MANAGEMENT
+// =============================================================================
+class SessionManager {
+  /**
+   * Manages different AI sessions (prompt, completion, writer, rewriter).
    * @constructor
    * How to use:
-   *   const messageManager = new MessageManager();
-   *   messageManager.addListener('MESSAGE_TYPE', handlerFunction);
-   *   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-   *     messageManager.handleMessage(message, sender, sendResponse);
-   *     return true; // Indicate async response
-   *   });
-   * @example
-   *   messageManager.addListener('greeting', (data, sender) => {
-   *     console.log('Received greeting:', data);
-   *   });
+   *   const sessionManager = new SessionManager();
+   *   sessionManager.createSession('prompt', initialData);
+   *   sessionManager.getSession('prompt');
+   *   sessionManager.destroySession('prompt');
    */
-
   constructor() {
-    this.listener = new Map();
-    this.requestId = 0;
+    this.sessions = {
+      prompt: null,
+      completion: null,
+      writer: null,
+      rewriter: null,
+    };
   }
 
-  addListener(type, handler) {
-    if (!this.listener.has(type)) {
-      this.listener.set(type, []);
+  destroy(type) {
+    if (this.sessions[type]) {
+      this.sessions[type].destroy();
+      this.sessions[type] = null;
     }
-    this.listener.get(type).push(handler)
   }
-  removeListener(type, handler) {
-    if (this.listener.has(type)) {
-      const handlers = this.listener.get(type);
-      const index = handlers.indexOf(handler);
 
-      if (index > -1) {
-        handlers.splice(index, 1);
+  destroyAllExcept(exceptKey) {
+    Object.keys(this.sessions).forEach(key => {
+      if (key !== exceptKey) {
+        this.destroy(key);
       }
-    }
-  }
-  // Handles incoming messages and routes them to the appropriate listener.
-  handleMessage(message, sender, sendResponse) {
-    const { type, data } = message;
-    if (this.listener.has(type)) {
-      const handlers = this.listener.get(type);
-      handlers.forEach(handler => {
-        try {
-          const result = handler(data, sender);
-          if (result instanceof Promise) {
-            result.then(response => sendResponse({ success: true, data: response }))
-              .catch(error => sendResponse({ success: false, error: error.message }));
-            return true
-          } else if (result !== undefined) {
-            sendResponse({ success: true, data: result });
-          }
-        } catch (error) {
-          sendResponse({ success: false, error: error.message })
-        }
-      })
-    } else {
-      sendResponse({ success: false, error: "Unknown message type" })
-    }
-  }
-}
-
-
-const messageManager = new MessageManager();
-
-
-// Session management
-const sessions = {
-  prompt: null,
-  completion: null,
-  writer: null,
-  rewriter: null,
-};
-
-// Copilot State management
-let copilotState = {
-  isEnabled: false,
-  activeTabId: null
-};
-
-// Save Copilot state to storage
-async function saveCopilotState() {
-  try {
-    await chrome.storage.local.set({ copilotState });
-  } catch (error) {
-    console.error('Failed to save copilot state:', error);
-  }
-}
-
-// Load Copilot state from storage
-async function loadCopilotState() {
-  try {
-    const result = await chrome.storage.local.get(['copilotState']);
-    if (result.copilotState) {
-      copilotState = { ...copilotState, ...result.copilotState };
-    }
-  } catch (error) {
-    console.error('Failed to load copilot state:', error);
-  }
-}
-
-let defaults = null;
-let isInitialized = false;
-
-async function initDefaults() {
-  defaults = await LanguageModel.params();
-  console.log('Model default:', defaults);
-  if (!('LanguageModel' in self)) {
-    console.log("Prompt Model not available")
-  }
-  // Revive Copilot state --- IGNORE ---
-  await loadCopilotState();
-  console.log('Copilot state loaded:', copilotState);
-  isInitialized = true;
-}
-
-initDefaults();
-
-// Monitor tab updates (refresh, navigation, etc.)
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  console.log('Tab updated:', tabId, changeInfo.status, 'copilotEnabled:', copilotState.isEnabled);
-
-  // When a tab finishes loading, auto-init CopilotWriter if enabled
-  if (changeInfo.status === 'complete' &&
-    copilotState.isEnabled &&
-    tab.url &&
-    !tab.url.startsWith('chrome://') &&
-    !tab.url.startsWith('chrome-extension://')) {
-
-    console.log('Attempting to auto-init CopilotWriter for tab:', tabId, tab.url);
-
-    // Set a slight delay to ensure content script is ready --- IGNORE ---
-    setTimeout(() => {
-      chrome.tabs.sendMessage(tabId, { type: 'INIT_COPILOT_WRITER' }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.log('Failed to init copilot on tab:', chrome.runtime.lastError.message);
-        } else {
-          console.log('Auto-initialized CopilotWriter on tab:', tabId, response);
-        }
-      });
-    }, 500);
-  }
-});
-
-// Monitor active tab changes
-chrome.tabs.onActivated.addListener((activeInfo) => {
-  if (copilotState.isEnabled) {
-    // Update current active tab
-    copilotState.activeTabId = activeInfo.tabId;
-    saveCopilotState();
-  }
-});
-
-
-// Message Handling
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  messageManager.handleMessage(message, sender, sendResponse);
-  return true;
-});
-
-// Register message listeners
-messageManager.addListener('CHAT_WITH_AI', async (data, sender) => {
-  return await handleAIChat(data);
-});
-
-messageManager.addListener('UPDATE_COMPLETION_OPTIONS', async () => {
-  // 通知content script更新配置
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]) {
-      chrome.tabs.sendMessage(tabs[0].id, { type: 'UPDATE_COMPLETION_OPTIONS' }, (response) => {
-        console.log('Completion options updated on content script:', response);
-      });
-    }
-  });
-  return true;
-});
-
-messageManager.addListener('UPDATE_CHAT_CONTEXT', async () => {
-  // Clear existing prompt session
-  if (sessions.prompt) {
-    sessions.prompt.destroy();
-    sessions.prompt = null;
-  }
-  await createPromptSession();
-  return true;
-});
-
-messageManager.addListener('CHECK_STATUS', async () => {
-  return await checkingAvailability();
-})
-
-messageManager.addListener('ENABLE_REWRITER', async () => {
-  await createRewriterSession();
-});
-
-messageManager.addListener('RESET_SESSION', async () => {
-  resetAllSessions();
-  copilotState.isEnabled = false;
-  copilotState.activeTabId = null;
-  await saveCopilotState();
-
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]) {
-      chrome.tabs.sendMessage(tabs[0].id, { type: 'DESTROY_COPILOT_WRITER' }, (response) => {
-        console.log('Content script response:', response);
-      });
-    }
-  });
-  return true;
-});
-
-messageManager.addListener('GET_COPILOT_STATUS', async () => {
-  if (!isInitialized) {
-    await loadCopilotState();
-    isInitialized = true;
-  }
-  console.log('GET_COPILOT_STATUS requested, current state:', copilotState);
-  return { isEnabled: copilotState.isEnabled };
-});
-
-messageManager.addListener('CREATE_COMPLETION_SESSION', async () => {
-  createCompletionSession();
-  createPromptSession();
-
-  // Enable Copilot
-  copilotState.isEnabled = true;
-
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]) {
-      copilotState.activeTabId = tabs[0].id;
-      saveCopilotState(); // Save state
-
-      chrome.tabs.sendMessage(tabs[0].id, { type: 'INIT_COPILOT_WRITER' }, (response) => {
-        console.log('Content script response:', response);
-      });
-    }
-  });
-  return true;
-});
-
-// Completion Session Handling
-messageManager.addListener('ENABLE_COMPLETION', async () => {
-  if (!sessions.completion) {
-    await createCompletionSession();
-  }
-});
-
-// Storage Management
-async function getStorage(key) {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.get([key], (result) => {
-      if (chrome.runtime.lastError) {
-        return reject(new Error(chrome.runtime.lastError.message));
-      }
-      resolve(result[key]);
     });
-  });
-}
-
-// Main Function
-async function checkingAvailability() {
-  const promptAvailability = await LanguageModel.availability();
-  const writerAvailability = await Writer.availability();
-  const rewriterAvailability = await Rewriter.availability();
-
-  return {
-    prompt: promptAvailability,
-    writer: writerAvailability,
-    rewriter: rewriterAvailability
-  };
-}
-
-function destroySessions(exceptKey) {
-  for (const key in sessions) {
-    if (key !== exceptKey && sessions[key]) {
-      sessions[key].destroy();
-      sessions[key] = null;
-    }
   }
-}
 
-function resetAllSessions() {
-  destroySessions('prompt');
-}
 
-async function createSession(type, createFn) {
-  destroySessions('prompt');
-  if (!sessions[type]) {
-    sessions[type] = await createFn();
-  }
-  return sessions[type];
-}
+  async createPromptSession() {
+    if (this.sessions.prompt) return this.sessions.prompt;
 
-async function createPromptSession() {
-  return await createSession('prompt', async () => {
+    const content = await this.getStorageValue('prompt_content');
+    const initialPrompts = [{
+      role: 'system',
+      content: "You're a helpful assistant. Answer the user's questions based on the provided context." + (content || "")
+    }];
 
-    const content = await getStorage('prompt_content');
-    const initialPrompts = [
-      {
-        role: 'system',
-        content: "You're a helpful assistant. Answer the user's questions based on the provided context." + (content !== undefined ? content : "")
-      },
-    ];
-    return await LanguageModel.create({
+    this.sessions.prompt = await LanguageModel.create({
       initialPrompts,
       temperature: 0.7,
       topK: 3,
-      monitor(m) {
+      monitor: (m) => {
         m.addEventListener('downloadprogress', (e) => {
-          console.log(`Downloaded ${e.loaded * 100}%`);
+          console.log(`Prompt model: ${(e.loaded * 100).toFixed(1)}%`);
         });
       },
     });
-  });
-}
 
-async function createCompletionSession() {
-  return await createSession('completion', async () => {
-    const initialPrompts = [
-      {
-        role: 'system',
-        content: "You are a precise writing assistant. When given text, continue it with ONLY the next logical sentence or phrase. Rules: 1) Complete the current thought if it's incomplete, 2) Add only 1 sentence if the thought is complete, 3) Never write multiple paragraphs, 4) Stop at the first natural sentence ending, 5) Be contextually relevant and concise."
-      }
-    ];
-    return await LanguageModel.create({
+    return this.sessions.prompt;
+  }
+
+  async createCompletionSession() {
+    if (this.sessions.completion) return this.sessions.completion;
+
+    const initialPrompts = [{
+      role: 'system',
+      content: "You are a precise writing assistant. When given text, continue it with ONLY the next logical sentence or phrase. Rules: 1) Complete the current thought if incomplete, 2) Add only 1 sentence if complete, 3) Never write multiple paragraphs, 4) Stop at first natural sentence ending, 5) Be contextually relevant and concise."
+    }];
+
+    this.sessions.completion = await LanguageModel.create({
       initialPrompts,
       temperature: 0.6,
       topK: 3,
-      monitor(m) {
+      monitor: (m) => {
         m.addEventListener('downloadprogress', (e) => {
-          console.log(`Completion model downloaded ${e.loaded * 100}%`);
+          console.log(`Completion model: ${(e.loaded * 100).toFixed(1)}%`);
         });
       },
     });
-  });
-}
 
-async function createWriterSession() {
-  console.log('Creating writer session...');
-  return await createSession('writer', async () => {
-    const result = await new Promise(resolve => {
-      chrome.storage.local.get(['writerOptions'], resolve);
-    });
-    const options = result.writerOptions || {
+    return this.sessions.completion;
+  }
+  async createWriterSession() {
+    if (this.sessions.writer) return this.sessions.writer;
+
+    const options = await this.getStorageValue('writerOptions') || {
       tone: 'neutral',
       length: 'medium',
       format: 'plain-text',
       sharedContext: '',
     };
-    return await Writer.create(options);
-  });
-}
 
-async function createRewriterSession() {
-  console.log('Creating rewriter session...');
-  return await createSession('rewriter', async () => {
-    const result = await new Promise(resolve => {
-      chrome.storage.local.get(['rewriterOptions'], resolve);
-    });
-    const options = result.rewriterOptions || {
+    this.sessions.writer = await Writer.create(options);
+    return this.sessions.writer;
+  }
+
+  async createRewriterSession() {
+    if (this.sessions.rewriter) return this.sessions.rewriter;
+    const options = await this.getStorageValue('rewriterOptions') || {
       tone: 'as-is',
       format: 'as-is',
       length: 'as-is',
       sharedContext: '',
     };
-    return await Rewriter.create(options);
-  });
-}
 
-async function handleAIChat(data) {
-  const { message, chatHistory } = data;
+    this.sessions.rewriter = await Rewriter.create(options);
+    return this.sessions.rewriter;
+  }
 
-  // Read pageTextSnapshot as context
-  let pageText = '';
-  try {
-    const result = await new Promise(resolve => {
-      chrome.storage.local.get(['pageTextSnapshot'], resolve);
+  async getStorageValue(key) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get([key], (result) => {
+        resolve(result[key]);
+      });
     });
-    if (result.pageTextSnapshot) {
-      pageText = result.pageTextSnapshot;
-    }
-  } catch (e) {
-    console.warn('Failed to get pageTextSnapshot:', e);
   }
-
-  if (!sessions.prompt) {
-    await createPromptSession();
-  }
-
-  // Construct full prompt with context + chat history + current message
-  let fullPrompt = '';
-  if (pageText) {
-    fullPrompt += `Context from page:\n${pageText}\n\n`;
-  }
-  if (chatHistory && chatHistory.length > 0) {
-    const historyText = chatHistory.slice(-8).map(msg =>
-      `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
-    ).join('\n');
-    fullPrompt += `${historyText}\nUser: ${message}`;
-  } else {
-    fullPrompt += message;
-  }
-
-  // Call prompt
-  const response = await sessions.prompt.prompt(fullPrompt);
-  return {
-    response: response.trim(),
-    timestamp: Date.now()
-  };
 }
 
-// Streaming Handling
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name === "AI_WRITER_STREAM") {
-    // Track abort controllers for each stream type per port
-    const abortControllers = {
+// =============================================================================
+//  STREAMING HANDLER
+// =============================================================================
+class StreamHandler {
+  /**
+   * Manages streaming responses for different AI sessions.
+  */
+  constructor(SessionManager) {
+    this.sessionManager = SessionManager;
+    this.abortControllers = {
       completion: null,
       writer: null,
       rewriter: null
     };
+  }
 
-    port.onMessage.addListener(async (message) => {
-      try {
-        if (message.type === "COMPLETION_STREAM") {
-          // Abort previous completion stream if running
-          if (abortControllers.completion) {
-            console.log('Aborting previous completion stream');
-            abortControllers.completion.abort();
-          }
-          
-          // Create new abort controller for this stream
-          abortControllers.completion = new AbortController();
-          
-          const { prompt, paragraphText, fullPageText, metadata, options } = message.data;
-          console.log('Starting completion stream with context level:', options?.contextLevel || 'none');
-          
-          if (!sessions.completion) {
-            await createCompletionSession();
-          }
-    
-          let completionPrompt = '';
-          
-          if (options?.enableContextAware && options.contextLevel !== 'none') {
-            if (options.contextLevel === 'paragraph') {
-              // Use paragraph-specific context text
-              const contextToUse = paragraphText || '';
-              const maxLength = Math.min(options.maxContextLength || 1000, 1000);
-              const truncatedContext = contextToUse.length > maxLength ? 
-                contextToUse.substring(0, maxLength) + '...' : contextToUse;
-                
-              completionPrompt = `Based on this paragraph context: "${truncatedContext}"
+  abort(type) {
+    if (this.abortControllers[type]) {
+      this.abortControllers[type].abort();
+      this.abortControllers[type] = null;
+    }
+  }
 
-Complete the following text with just the next logical sentence or phrase: "${prompt}"`;
-              
-              console.log('Using paragraph context, length:', contextToUse.length);
-              
-            } else if (options.contextLevel === 'fullpage') {
-              // Use full page context text
-              const contextToUse = fullPageText || '';
-              const maxLength = Math.min(options.maxContextLength || 1000, 3000);
-              
-              // Smart truncation: keep beginning and end parts
-              let truncatedContext = '';
-              if (contextToUse.length > maxLength) {
-                const startPart = contextToUse.substring(0, Math.floor(maxLength * 0.4));
-                const endPart = contextToUse.substring(Math.max(0, contextToUse.length - Math.floor(maxLength * 0.6)));
-                truncatedContext = startPart + "\n...[content omitted]...\n" + endPart;
-              } else {
-                truncatedContext = contextToUse;
-              }
-              
-              completionPrompt = `Based on this page context (${metadata?.contentType || 'general'} content, title: "${metadata?.title || 'Unknown'}"): "${truncatedContext}"
+  abortAll() {
+    Object.keys(this.abortControllers).forEach(type => {
+      this.abort(type);
+    });
+  }
 
-Complete the following text with just the next logical sentence or phrase: "${prompt}"`;
-              
-              console.log('Using full page context, original length:', contextToUse.length, 'truncated length:', truncatedContext.length);
-            }
-          } else {
-            // No context mode - use only the current input
-            completionPrompt = `Complete the following text with just the next logical sentence or phrase: "${prompt}"`;
-            console.log('Using no context mode');
-          }
-          
-          try {
-            const stream = sessions.completion.promptStreaming(completionPrompt, {
-              signal: abortControllers.completion.signal
-            });
-            
-            let accumulatedText = '';
-            let sentenceCount = 0;
-            let shouldStop = false;
-            
-            for await (const chunk of stream) {
-              if (shouldStop) break;
-              
-              accumulatedText += chunk;
-              
-              // Count sentences by looking for sentence-ending punctuation
-              const sentences = accumulatedText.match(/[.!?]+/g);
-              const currentSentenceCount = sentences ? sentences.length : 0;
-              
-              // Stop conditions:
-              // 1. After 1-2 complete sentences
-              // 2. If we've accumulated too much text (150+ chars)
-              // 3. If we see paragraph breaks or multiple line breaks
-              if (currentSentenceCount >= 2 || 
-                  accumulatedText.length > 150 ||
-                  accumulatedText.includes('\n\n') ||
-                  accumulatedText.match(/\n.*\n/)) {
-                shouldStop = true;
-                
-                // Trim to just complete sentences
-                const sentenceEndMatch = accumulatedText.match(/^.*?[.!?]+/);
-                if (sentenceEndMatch) {
-                  const trimmedChunk = sentenceEndMatch[0];
-                  if (trimmedChunk !== accumulatedText) {
-                    // Send only the complete sentence part
-                    const finalChunk = trimmedChunk.substring(accumulatedText.length - chunk.length);
-                    if (finalChunk) {
-                      port.postMessage({ type: "STREAM_CHUNK", data: { chunk: finalChunk } });
-                    }
-                    break;
-                  }
-                }
-              }
-              
-              port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
-            }
-            
-            port.postMessage({ type: "STREAM_END" });
-            console.log('Completion stream completed with length:', accumulatedText.length);
-            
-            // Clear the controller after successful completion
-            abortControllers.completion = null;
-            
-          } catch (error) {
-            if (error.name === 'AbortError') {
-              console.log('Completion stream aborted');
-              port.postMessage({ type: "STREAM_ABORTED" });
-            } else {
-              throw error; // Re-throw other errors
-            }
-          }
-          
-        } else if (message.type === "WRITER_STREAM") {
-          // Abort previous writer stream if running
-          if (abortControllers.writer) {
-            console.log('Aborting previous writer stream');
-            abortControllers.writer.abort();
-          }
-          
-          // Create new abort controller for this stream
-          abortControllers.writer = new AbortController();
-          
-          const { prompt } = message.data;
-          console.log('Starting writer stream for:', prompt);
-          
-          if (!sessions.writer) {
-            await createWriterSession();
-          }
-          
-          try {
-            const stream = sessions.writer.writeStreaming(prompt, { 
-              context: '',
-              signal: abortControllers.writer.signal 
-            });
-            
-            for await (const chunk of stream) {
-              port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
-            }
-            port.postMessage({ type: "STREAM_END" });
-            console.log('Writer stream completed');
-            
-            // Clear the controller after successful completion
-            abortControllers.writer = null;
-            
-          } catch (error) {
-            if (error.name === 'AbortError') {
-              console.log('Writer stream aborted');
-              port.postMessage({ type: "STREAM_ABORTED" });
-            } else {
-              throw error; // Re-throw other errors
-            }
-          }
-          
-        } else if (message.type === "REWRITER_STREAM") {
-          // Abort previous rewriter stream if running
-          if (abortControllers.rewriter) {
-            console.log('Aborting previous rewriter stream');
-            abortControllers.rewriter.abort();
-          }
-          
-          // Create new abort controller for this stream
-          abortControllers.rewriter = new AbortController();
-          
-          console.log('Starting rewriter stream for:', message.data.prompt);
-          const { prompt } = message.data;
-          
-          if (!sessions.rewriter) {
-            await createRewriterSession();
-          }
-          
-          try {
-            const stream = sessions.rewriter.rewriteStreaming(prompt, { 
-              context: '',
-              signal: abortControllers.rewriter.signal 
-            });
-            
-            for await (const chunk of stream) {
-              port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
-            }
-            port.postMessage({ type: "STREAM_END" });
-            console.log('Rewriter stream completed');
-            
-            // Clear the controller after successful completion
-            abortControllers.rewriter = null;
-            
-          } catch (error) {
-            if (error.name === 'AbortError') {
-              console.log('Rewriter stream aborted');
-              port.postMessage({ type: "STREAM_ABORTED" });
-            } else {
-              throw error; // Re-throw other errors
-            }
-          }
+  buildCompletionPrompt(prompt, paragraphText, fullPageText, metadata, options) {
+    if (!options?.enableContextAware || options.contextLevel === 'none') {
+      return `Complete the following text with just the next logical sentence or phrase: "${prompt}"`;
+    }
+
+    if (options.contextLevel === 'paragraph') {
+      const context = this.truncateText(paragraphText || '', options.maxContextLength || 1000, 1000);
+      return `Based on this paragraph context: "${context}"\n\nComplete the following text with just the next logical sentence or phrase: "${prompt}"`;
+    }
+
+    if (options.contextLevel === 'fullpage') {
+      const context = this.smartTruncate(fullPageText || '', options.maxContextLength || 1000, 3000);
+      return `Based on this page context (${metadata?.contentType || 'general'} content): "${context}"\n\nComplete the following text with just the next logical sentence or phrase: "${prompt}"`;
+    }
+
+    return `Complete the following text with just the next logical sentence or phrase: "${prompt}"`;
+  }
+
+
+  handleStreamError(error, port, type) {
+    if (error.name === 'AbortError') {
+      console.log(`${type} stream aborted`);
+      port.postMessage({ type: "STREAM_ABORTED" });
+    } else {
+      console.error(`${type} stream error:`, error);
+      port.postMessage({
+        type: "STREAM_ERROR",
+        error: `${type} failed: ${error.message}`
+      });
+    }
+  }
+
+  async handleCompletion(data, port) {
+    this.abort('completion');
+    this.abortControllers.completion = new AbortController();
+
+    const { prompt, paragraphText, fullPageText, metadata, options } = data;
+    await this.sessionManager.createCompletionSession();
+    const completionPrompt = this.buildCompletionPrompt(prompt, paragraphText, fullPageText, metadata, options);
+
+    try {
+      const stream = this.sessionManager.sessions.completion.promptStreaming(completionPrompt, {
+        signal: this.abortControllers.completion.signal
+      });
+
+      let accumulatedText = '';
+      let wordCount = 0;
+
+      for await (const chunk of stream) {
+        accumulatedText += chunk;
+        wordCount += chunk.split(/\s+/).length
+
+        // Count sentences by looking for sentence-ending punctuation
+        const hasSentenceEnd = /[.!?]\s*$/.test(accumulatedText.trim());
+
+        // Stop conditions:
+        // 1. After 1-2 complete sentences
+        // 2. If we've accumulated too much text (150+ chars)
+        // 3. If we see paragraph breaks or multiple line breaks
+        if ((wordCount >= 15 && hasSentenceEnd) || wordCount >= 30) {
+          port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+          break;
         }
-      } catch (error) {
-        console.error(`Stream error for ${message.type}:`, error);
-        port.postMessage({ 
-          type: "STREAM_ERROR", 
-          error: error.message || 'Unknown error occurred' 
-        });
+        port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+      }
+      port.postMessage({ type: "STREAM_END" });
+      this.abortControllers.completion = null;
+    } catch (error) {
+      this.handleStreamError(error, port, 'Completion');
+    }
+
+  }
+  async handleWriter(message, port) {
+    this.abort('writer');
+    this.abortControllers.writer = new AbortController();
+
+    const { prompt } = message.data;
+    await this.sessionManager.createWriterSession();
+
+    try {
+      const stream = this.sessionManager.sessions.writer.writeStreaming(prompt, {
+        context: '',
+        signal: this.abortControllers.writer.signal
+      });
+
+      for await (const chunk of stream) {
+        port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+      }
+
+      port.postMessage({ type: "STREAM_END" });
+      this.abortControllers.writer = null;
+
+    } catch (error) {
+      this.handleStreamError(error, port, 'Writer');
+    }
+  }
+
+  async handleRewriter(message, port) {
+    this.abort('rewriter');
+    this.abortControllers.rewriter = new AbortController();
+
+    const { prompt } = message.data;
+    await this.sessionManager.createRewriterSession();
+
+    try {
+      const stream = this.sessionManager.sessions.rewriter.rewriteStreaming(prompt, {
+        context: '',
+        signal: this.abortControllers.rewriter.signal
+      });
+
+      for await (const chunk of stream) {
+        port.postMessage({ type: "STREAM_CHUNK", data: { chunk } });
+      }
+
+      port.postMessage({ type: "STREAM_END" });
+      this.abortControllers.rewriter = null;
+
+    } catch (error) {
+      this.handleStreamError(error, port, 'Rewriter');
+    }
+  }
+  truncateText(text, userLimit, maxLimit) {
+    const limit = Math.min(userLimit, maxLimit);
+    return text.length > limit ? text.substring(0, limit) + '...' : text;
+  }
+
+  smartTruncate(text, userLimit, maxLimit) {
+    const limit = Math.min(userLimit, maxLimit);
+    if (text.length <= limit) return text;
+
+    const startPart = text.substring(0, Math.floor(limit * 0.4));
+    const endPart = text.substring(Math.max(0, text.length - Math.floor(limit * 0.6)));
+    return startPart + "\n...[content omitted]...\n" + endPart;
+  }
+
+}
+
+// =============================================================================
+// MAIN APPLICATION
+// =============================================================================
+
+
+class AIAssistantBackground {
+  constructor() {
+    this.stateManager = new StateManager();
+    this.sessionManager = new SessionManager();
+    this.messageHandler = new MessageHandler(this.stateManager, this.sessionManager);
+    this.streamHandler = new StreamHandler(this.sessionManager);
+
+    this.init();
+  }
+
+  async init() {
+    // Initialize defaults
+    const defaults = await LanguageModel.params();
+    console.log('Model defaults:', defaults);
+
+    await this.stateManager.load();
+    console.log('Copilot state loaded:', this.stateManager.copilotState);
+
+    this.setupTabListeners();
+    this.setupStreamListener();
+  }
+
+  setupTabListeners() {
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.status === 'complete' &&
+        this.stateManager.copilotState.isEnabled &&
+        tab.url &&
+        !tab.url.startsWith('chrome://') &&
+        !tab.url.startsWith('chrome-extension://')) {
+
+        setTimeout(() => {
+          chrome.tabs.sendMessage(tabId, { type: 'INIT_COPILOT_WRITER' });
+        }, 500);
       }
     });
 
-    port.onDisconnect.addListener(() => {
-      console.log("AI stream port disconnected");
-      
-      // Abort all running streams when port disconnects
-      if (abortControllers.completion) {
-        abortControllers.completion.abort();
-        abortControllers.completion = null;
-      }
-      if (abortControllers.writer) {
-        abortControllers.writer.abort();
-        abortControllers.writer = null;
-      }
-      if (abortControllers.rewriter) {
-        abortControllers.rewriter.abort();
-        abortControllers.rewriter = null;
+    chrome.tabs.onActivated.addListener((activeInfo) => {
+      if (this.stateManager.copilotState.isEnabled) {
+        this.stateManager.copilotState.activeTabId = activeInfo.tabId;
+        this.stateManager.save();
       }
     });
   }
-});
 
+  setupStreamListener() {
+    chrome.runtime.onConnect.addListener((port) => {
+      if (port.name === "AI_WRITER_STREAM") {
+        const streamHandler = new StreamHandler(this.sessionManager);
+
+        port.onMessage.addListener(async (message) => {
+          try {
+            switch (message.type) {
+              case "COMPLETION_STREAM":
+                await streamHandler.handleCompletion(message.data, port);
+                break;
+              case "WRITER_STREAM":
+                await streamHandler.handleWriter(message, port);
+                break;
+              case "REWRITER_STREAM":
+                await streamHandler.handleRewriter(message, port);
+                break;
+            }
+          } catch (error) {
+            console.error(`Stream error for ${message.type}:`, error);
+            port.postMessage({
+              type: "STREAM_ERROR",
+              error: error.message || 'Unknown error occurred'
+            });
+          }
+        });
+
+        port.onDisconnect.addListener(() => {
+          console.log("AI stream port disconnected");
+          streamHandler.abortAll();
+        });
+      }
+    });
+  }
+}
+
+const aiAssistantBackground = new AIAssistantBackground();
+// --- IGNORE ---

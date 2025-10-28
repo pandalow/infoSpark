@@ -208,7 +208,7 @@ class CopilotWriter {
         }
     }
 
-    // Create the completion panel that follows the input field
+    // Create the draggable completion panel
     createCompletionPanel() {
         // Creating the main container
         this.completionPanel = document.createElement('div');
@@ -227,10 +227,13 @@ class CopilotWriter {
             font-size: 13px;
             display: none;
             overflow: hidden;
+            cursor: move;
+            user-select: none;
         `;
 
-        // Title bar
+        // Title bar (draggable area)
         const titleBar = document.createElement('div');
+        titleBar.id = 'copilot-title-bar';
         titleBar.style.cssText = `
             background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
             color: white;
@@ -243,9 +246,10 @@ class CopilotWriter {
             font-size: 13px;
             height: 36px;
             box-sizing: border-box;
+            cursor: grab;
         `;
         titleBar.innerHTML = `
-            <span>InfoSpark AI Assistant</span>
+            <span>📝 InfoSpark AI Assistant</span>
             <button id="copilot-close-btn" style="
                 background: rgba(255, 255, 255, 0.2);
                 border: none;
@@ -262,6 +266,9 @@ class CopilotWriter {
                 transition: background 0.3s ease;
             " onmouseover="this.style.background='rgba(255, 255, 255, 0.3)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.2)'">×</button>
         `;
+
+        // Make panel draggable
+        this.makePanelDraggable(titleBar);
 
         // Content area setup
         const contentArea = document.createElement('div');
@@ -472,6 +479,101 @@ class CopilotWriter {
         });
     }
 
+    // Make the panel draggable
+    makePanelDraggable(titleBar) {
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        titleBar.addEventListener('mousedown', (e) => {
+            // Don't drag if clicking the close button
+            if (e.target.closest('#copilot-close-btn')) return;
+            
+            isDragging = true;
+            const rect = this.completionPanel.getBoundingClientRect();
+            dragOffset.x = e.clientX - rect.left;
+            dragOffset.y = e.clientY - rect.top;
+            
+            titleBar.style.cursor = 'grabbing';
+            this.completionPanel.style.opacity = '0.8';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const newLeft = e.clientX - dragOffset.x;
+            const newTop = e.clientY - dragOffset.y;
+            
+            // Keep panel within viewport bounds
+            const panelWidth = this.completionPanel.offsetWidth;
+            const panelHeight = this.completionPanel.offsetHeight;
+            const maxLeft = window.innerWidth - panelWidth;
+            const maxTop = window.innerHeight - panelHeight;
+            
+            const boundedLeft = Math.max(0, Math.min(newLeft, maxLeft));
+            const boundedTop = Math.max(0, Math.min(newTop, maxTop));
+            
+            this.completionPanel.style.left = `${boundedLeft}px`;
+            this.completionPanel.style.top = `${boundedTop}px`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                titleBar.style.cursor = 'grab';
+                this.completionPanel.style.opacity = '1';
+                
+                // Save position to localStorage
+                this.savePanelPosition();
+            }
+        });
+    }
+
+    // Save panel position for next session
+    savePanelPosition() {
+        if (!this.completionPanel) return;
+        
+        const rect = this.completionPanel.getBoundingClientRect();
+        const position = {
+            left: rect.left,
+            top: rect.top
+        };
+        localStorage.setItem('copilot-panel-position', JSON.stringify(position));
+        console.log('Panel position saved:', position);
+    }
+
+    // Load saved panel position
+    loadPanelPosition() {
+        try {
+            const saved = localStorage.getItem('copilot-panel-position');
+            if (saved) {
+                const position = JSON.parse(saved);
+                
+                // Ensure position is still within current viewport
+                const panelWidth = 420;
+                const panelHeight = 300;
+                const maxLeft = window.innerWidth - panelWidth;
+                const maxTop = window.innerHeight - panelHeight;
+                
+                const left = Math.max(0, Math.min(position.left, maxLeft));
+                const top = Math.max(0, Math.min(position.top, maxTop));
+                
+                console.log('Panel position loaded:', { left, top });
+                return { left, top };
+            }
+        } catch (error) {
+            console.warn('Failed to load saved panel position:', error);
+        }
+        
+        // Default to bottom-right corner
+        const defaultPosition = {
+            left: window.innerWidth - 420 - 20,
+            top: window.innerHeight - 300 - 20
+        };
+        console.log('Using default panel position:', defaultPosition);
+        return defaultPosition;
+    }
+
     // Setup global event listeners
     setupGlobalEventListeners() {
         this.handleFocusInBound = this.handleFocusIn.bind(this);
@@ -601,33 +703,12 @@ class CopilotWriter {
     }
 
     handleScroll(event) {
-        // Reposition the panel when the page scrolls or the window resizes
-        if (this.completionPanel && 
-            this.completionPanel.style.display === 'block' && 
-            this.currentElement) {
-            
-            // use debounce to avoid frequent repositioning
-            if (this.scrollTimer) {
-                clearTimeout(this.scrollTimer);
-            }
-            
-            this.scrollTimer = setTimeout(() => {
-                // Check whether the current element is still visible in the viewport
-                const rect = this.currentElement.getBoundingClientRect();
-                const isVisible = rect.top >= 0 && 
-                                rect.left >= 0 && 
-                                rect.bottom <= window.innerHeight && 
-                                rect.right <= window.innerWidth;
-                
-                if (isVisible) {
-                    this.positionPanel();
-                } else {
-                    // hide the panel if the input is no longer visible
-                    this.hideCompletionPanel();
-                }
-                this.scrollTimer = null;
-            }, 16); // ~60fps
-        }
+        // Fixed position panels don't need repositioning on scroll
+        // Panel stays at its draggable position regardless of page scroll
+        console.log('Scroll detected - panel stays at fixed position');
+        
+        // Optionally, we could check if panel is getting in the way and auto-hide
+        // but for now let's keep it visible at its fixed position
     }
 
     // Main logic to request completion
@@ -646,7 +727,7 @@ class CopilotWriter {
         this.completionText.textContent = completion;
         this.completionPanel.style.display = 'block';
 
-        // Position the panel relative to the current input element
+        // Position the panel at its saved or default location
         this.positionPanel();
 
         // If loading state, disable buttons
@@ -658,74 +739,22 @@ class CopilotWriter {
         });
     }
 
-    // Position the panel relative to the current input element
+    // Position the panel at the saved or default location
     positionPanel() {
-        if (!this.currentElement || !this.completionPanel) {
-            console.log('positionPanel: missing element or panel', {
-                currentElement: !!this.currentElement,
-                completionPanel: !!this.completionPanel
-            });
+        if (!this.completionPanel) {
+            console.log('positionPanel: missing panel');
             return;
         }
 
-        const rect = this.currentElement.getBoundingClientRect();
+        // Load saved position or use default
+        const position = this.loadPanelPosition();
         
-        // 使用固定定位，这样更稳定
+        console.log('positionPanel: positioning at saved location', position);
+        
         this.completionPanel.style.position = 'fixed';
-        
-        // 面板尺寸
-        const panelWidth = 420;
-        const panelHeight = 300;
-        const padding = 8;
-        
-        // 视口尺寸
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        
-        // 直接放在输入框的正下方
-        let left = rect.left;
-        let top = rect.bottom + padding;
-        
-        // 如果面板宽度超过输入框宽度，居中对齐
-        if (panelWidth > rect.width) {
-            left = rect.left + (rect.width - panelWidth) / 2;
-        }
-        
-        // 检查右边界，如果超出则向左调整
-        if (left + panelWidth > viewportWidth) {
-            left = viewportWidth - panelWidth - padding;
-        }
-        
-        // 检查左边界
-        if (left < padding) {
-            left = padding;
-        }
-        
-        // 检查下边界，如果超出则放到输入框上方
-        if (top + panelHeight > viewportHeight) {
-            top = rect.top - panelHeight - padding;
-            // 如果上方也放不下，则放到视口顶部
-            if (top < padding) {
-                top = padding;
-            }
-        }
-        
-        console.log('positionPanel: positioning below input at', {
-            left: left,
-            top: top,
-            inputRect: {
-                left: rect.left,
-                top: rect.top,
-                right: rect.right,
-                bottom: rect.bottom,
-                width: rect.width,
-                height: rect.height
-            },
-            viewport: { width: viewportWidth, height: viewportHeight }
-        });
-        
-        this.completionPanel.style.left = `${left}px`;
-        this.completionPanel.style.top = `${top}px`;
+        this.completionPanel.style.left = `${position.left}px`;
+        this.completionPanel.style.top = `${position.top}px`;
+        this.completionPanel.style.zIndex = '999999';
     }
 
     // Hide the completion panel
