@@ -6,96 +6,88 @@ function ModelDownload({ aiStatus, onComplete }) {
     const [downloadPhase, setDownloadPhase] = useState('checking') // checking, ready, downloading, completed
     const [userInitiated, setUserInitiated] = useState(false)
 
-    // Listen for download progress messages from background
-    useEffect(() => {
-        const handleMessage = (message) => {
-            if (message.type === 'MODEL_DOWNLOAD_PROGRESS') {
-                const { modelType, progress } = message.data;
-                // Use any model's progress as overall progress (they share the same model)
-                setOverallProgress(progress);
-            } else if (message.type === 'MODEL_STATUS_CHANGED') {
-                const { modelType, status } = message.data;
-                
-                // If status becomes available, may need to update UI
-                if (status === 'available' && downloadPhase === 'downloading') {
-                    // Check if all models are completed
-                    setTimeout(() => {
-                        // This will be detected through aiStatus changes
-                    }, 500);
-                }
-            }
-        };
-
-        // Add message listener
-        chrome.runtime.onMessage.addListener(handleMessage);
-        
-        return () => {
-            // Cleanup listener
-            chrome.runtime.onMessage.removeListener(handleMessage);
-        };
-    }, [downloadPhase]);
-
     // Check if download page needs to be shown
     const needsDownload = () => {
-        const hasDownloadableOrUnavailable = Object.values(aiStatus).some(status => 
-            status === 'downloadable' || status === 'unavailable' || status === 'downloading'
-        );
-        return hasDownloadableOrUnavailable;
+        const status = aiStatus.prompt;
+        return status === 'downloadable' || status === 'unavailable' || status === 'downloading';
     }
 
     // Check if all models are ready
     const allModelsReady = () => {
-        const ready = Object.values(aiStatus).every(status => status === 'available')
-        return ready;
+        return aiStatus.prompt === 'available';
     }
 
     // Get list of models that need to be downloaded
     const getDownloadableModels = () => {
         const models = []
-        if (aiStatus.prompt !== 'available') models.push({ 
-            name: 'Language Model (Chat & Completion)', 
-            key: 'prompt',
-            status: aiStatus.prompt 
-        })
-        if (aiStatus.writer !== 'available') models.push({ 
-            name: 'Writer Model', 
-            key: 'writer',
-            status: aiStatus.writer 
-        })
-        if (aiStatus.rewriter !== 'available') models.push({ 
-            name: 'Rewriter Model', 
-            key: 'rewriter',
-            status: aiStatus.rewriter 
-        })
+
+        if (aiStatus.prompt !== 'available') {
+            models.push({
+                name: 'Gemini Nano Language Model',
+                key: 'prompt',
+                status: aiStatus.prompt
+            })
+        }
         return models
     }
 
-    // Start download process
+    // Start download process - direct model download in component
     const startDownload = async () => {
         setIsDownloading(true)
         setDownloadPhase('downloading')
         setUserInitiated(true)
 
         try {
-            // Call new download API
-            chrome.runtime.sendMessage({ type: 'START_MODEL_DOWNLOAD' }, (response) => {
-                if (response && response.success) {
-                    // Download has started, stay in downloading state
-                } else {
-                    // If download startup fails, don't immediately revert state
-                    // Let state checking logic handle it
-                    setTimeout(() => {
-                        if (downloadPhase === 'downloading' && !Object.values(aiStatus).some(s => s === 'downloading')) {
-                            setIsDownloading(false)
-                            setDownloadPhase('ready')
-                        }
-                    }, 1000)
+            console.log('Starting direct model download...')
+
+            // Check model availability first
+            const availability = await LanguageModel.availability()
+            console.log('Model availability:', availability)
+
+            if (availability === 'available') {
+                console.log('Model already available')
+                setOverallProgress(100)
+                setDownloadPhase('completed')
+                return
+            }
+
+            if (availability !== 'downloadable') {
+                throw new Error(`Model cannot be downloaded. Status: ${availability}`)
+            }
+
+            // Start download with progress monitoring
+            console.log('Creating language model with download monitoring...')
+            const session = await LanguageModel.create({
+                outputLanguage: 'en',
+                monitor: (m) => {
+                    console.log('Download monitor attached')
+                    m.addEventListener('downloadprogress', (e) => {
+                        const progress = Math.round(e.loaded * 100)
+                        console.log(`Download progress: ${progress}%`)
+                        setOverallProgress(progress)
+                    })
                 }
             })
 
+            console.log('Model download completed successfully')
+            setOverallProgress(100)
+
+            // Destroy session since we don't need it for actual operations
+            if (session && session.destroy) {
+                session.destroy()
+            }
+
+            setTimeout(() => {
+                setDownloadPhase('completed')
+            }, 500)
+
         } catch (error) {
+            console.error('Model download failed:', error)
             setIsDownloading(false)
             setDownloadPhase('ready')
+
+            // Show error to user
+            alert(`Download failed: ${error.message}. Please check your browser supports AI features and try again.`)
         }
     }
 
@@ -122,7 +114,7 @@ function ModelDownload({ aiStatus, onComplete }) {
     // Special handling: if all status are unavailable, force show download page
     useEffect(() => {
         const allUnavailable = Object.values(aiStatus).every(status => status === 'unavailable');
-        
+
         if (allUnavailable && downloadPhase === 'checking') {
             setDownloadPhase('ready');
         }
@@ -165,8 +157,8 @@ function ModelDownload({ aiStatus, onComplete }) {
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                                          d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                        d="M13 10V3L4 14h7v7l9-11h-7z" />
                                 </svg>
                             </div>
                             <div>
@@ -192,8 +184,8 @@ function ModelDownload({ aiStatus, onComplete }) {
                             <div className="text-center mb-4">
                                 <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
                                     <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                                     </svg>
                                 </div>
                                 <h3 className="text-lg font-bold text-gray-800 mb-1">AI Models Setup</h3>
@@ -218,8 +210,8 @@ function ModelDownload({ aiStatus, onComplete }) {
                             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
                                 <div className="flex items-center gap-2">
                                     <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
                                     </svg>
                                     <div className="text-sm">
                                         <span className="font-medium text-amber-800">One-time download (~1-2GB)</span>
@@ -234,8 +226,8 @@ function ModelDownload({ aiStatus, onComplete }) {
                             <div className="text-center mb-6">
                                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
                                     <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                                     </svg>
                                 </div>
                                 <h3 className="text-lg font-semibold text-gray-800 mb-2">Downloading AI Models</h3>
@@ -250,21 +242,21 @@ function ModelDownload({ aiStatus, onComplete }) {
                                     <h4 className="text-sm font-semibold text-gray-700">AI Models Download</h4>
                                     <span className="text-sm font-medium text-blue-600">{overallProgress.toFixed(1)}%</span>
                                 </div>
-                                
+
                                 {/* Progress bar */}
                                 <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
-                                    <div 
+                                    <div
                                         className="bg-gradient-to-r from-blue-500 to-purple-500 h-3 rounded-full transition-all duration-300 ease-out"
                                         style={{ width: `${overallProgress}%` }}
                                     ></div>
                                 </div>
-                                
+
                                 {/* Model status list */}
                                 <div className="space-y-2">
                                     {getDownloadableModels().map((model, index) => {
                                         const isCompleted = aiStatus[model.key] === 'available';
                                         const isDownloading = Object.values(aiStatus).some(status => status === 'downloading') && !isCompleted;
-                                        
+
                                         return (
                                             <div key={index} className="flex items-center gap-3">
                                                 <div className="flex-shrink-0">
@@ -298,7 +290,7 @@ function ModelDownload({ aiStatus, onComplete }) {
                                     <div className="text-sm text-blue-700">
                                         <p className="font-medium">Download in progress...</p>
                                         <p className="text-blue-600 mt-1">
-                                            Chrome is downloading the shared AI model that powers all three capabilities 
+                                            Chrome is downloading the shared AI model that powers all three capabilities
                                             (Chat, Writer, and Rewriter). This may take several minutes.
                                         </p>
                                     </div>

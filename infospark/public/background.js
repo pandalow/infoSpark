@@ -26,8 +26,6 @@ class MessageHandler {
       'RESET_SESSION': this.resetSession.bind(this),
       'UPDATE_COMPLETION_OPTIONS': this.updateCompletionOptions.bind(this),
       'UPDATE_CHAT_CONTEXT': this.updateChatContext.bind(this),
-      'START_MODEL_DOWNLOAD': this.startModelDownload.bind(this),
-      'GET_DOWNLOAD_PROGRESS': this.getDownloadProgress.bind(this),
     };
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -131,59 +129,7 @@ class MessageHandler {
     await this.sessionManager.createPromptSession();
     return true;
   }
-
-  // Start model download
-  async startModelDownload() {
-    try {
-      // Check current status
-      const status = await this.checkAvailability();
-      
-      // Only start download for models that need downloading
-      const downloadPromises = [];
-      
-      if (status.prompt === 'downloadable') {
-        downloadPromises.push(this.sessionManager.triggerPromptDownload());
-      }
-      
-      if (status.writer === 'downloadable') {
-        downloadPromises.push(this.sessionManager.triggerWriterDownload());
-      }
-      
-      if (status.rewriter === 'downloadable') {
-        downloadPromises.push(this.sessionManager.triggerRewriterDownload());
-      }
-
-      if (downloadPromises.length === 0) {
-        return {
-          success: true,
-          message: 'No models need downloading'
-        };
-      }
-
-      // Start download but don't wait for completion
-      Promise.all(downloadPromises).catch(error => {
-        console.error('Download error:', error);
-      });
-      
-      return {
-        success: true,
-        message: 'Model downloads started'
-      };
-    } catch (error) {
-      console.error('Failed to start model download:', error);
-      throw error;
-    }
-  }
-
-  // Async function to get download progress
-  async getDownloadProgress() {
-    return {
-      progress: this.sessionManager.downloadProgress,
-      status: this.sessionManager.downloadStatus
-    };
-  }
 }
-
 // =============================================================================
 // STATE MANAGEMENT
 // =============================================================================
@@ -257,7 +203,7 @@ class SessionManager {
     };
     this.downloadStatus = {
       prompt: 'unknown',
-      completion: 'unknown', 
+      completion: 'unknown',
       writer: 'unknown',
       rewriter: 'unknown'
     };
@@ -266,7 +212,7 @@ class SessionManager {
   // Broadcast download progress to frontend
   broadcastDownloadProgress(type, progress) {
     this.downloadProgress[type] = progress;
-    
+
     // Send message to all tabs
     chrome.tabs.query({}, (tabs) => {
       tabs.forEach(tab => {
@@ -304,7 +250,7 @@ class SessionManager {
   // Broadcast download status changes
   broadcastDownloadStatus(type, status) {
     this.downloadStatus[type] = status;
-    
+
     chrome.runtime.sendMessage({
       type: 'MODEL_STATUS_CHANGED',
       data: {
@@ -355,6 +301,7 @@ class SessionManager {
 
     try {
       this.sessions.prompt = await LanguageModel.create({
+        outputLanguage: 'en',
         initialPrompts,
         temperature: 0.7,
         topK: 3,
@@ -397,6 +344,7 @@ class SessionManager {
 
     try {
       this.sessions.completion = await LanguageModel.create({
+        outputLanguage: 'en',
         initialPrompts,
         temperature: 0.6,
         topK: 3,
@@ -454,7 +402,7 @@ class SessionManager {
 
   async createRewriterSession() {
     if (this.sessions.rewriter) return this.sessions.rewriter;
-    
+
     const options = await this.getStorageValue('rewriterOptions') || {
       tone: 'as-is',
       format: 'as-is',
@@ -477,79 +425,6 @@ class SessionManager {
       const newAvailability = await Rewriter.availability();
       this.broadcastDownloadStatus('rewriter', newAvailability);
       throw error;
-    }
-  }
-
-  // Methods specifically for triggering downloads
-  async triggerPromptDownload() {
-    console.log('Triggering prompt model download...');
-    try {
-      const content = await this.getStorageValue('prompt_content');
-      const initialPrompts = [{
-        role: 'system',
-        content: "You're a helpful assistant. Answer the user's questions based on the provided context." + (content || "")
-      }];
-
-      const session = await LanguageModel.create({
-        initialPrompts,
-        temperature: 0.7,
-        topK: 3,
-        monitor: (m) => {
-          m.addEventListener('downloadprogress', (e) => {
-            const progress = e.loaded * 100;
-            this.broadcastDownloadProgress('prompt', progress);
-            console.log(`Prompt model download: ${progress.toFixed(1)}%`);
-          });
-        },
-      });
-      
-      this.sessions.prompt = session;
-      this.broadcastDownloadStatus('prompt', 'available');
-      return session;
-    } catch (error) {
-      console.log('Download triggered for prompt model, monitoring progress...');
-      // Even if failed, it may be because the download is in progress
-      return null;
-    }
-  }
-
-  async triggerWriterDownload() {
-    console.log('Triggering writer model download...');
-    try {
-      const options = await this.getStorageValue('writerOptions') || {
-        tone: 'neutral',
-        length: 'medium',
-        format: 'plain-text',
-        sharedContext: '',
-      };
-
-      const session = await Writer.create(options);
-      this.sessions.writer = session;
-      this.broadcastDownloadStatus('writer', 'available');
-      return session;
-    } catch (error) {
-      console.log('Download triggered for writer model, monitoring progress...');
-      return null;
-    }
-  }
-
-  async triggerRewriterDownload() {
-    console.log('Triggering rewriter model download...');
-    try {
-      const options = await this.getStorageValue('rewriterOptions') || {
-        tone: 'as-is',
-        format: 'as-is',
-        length: 'as-is',
-        sharedContext: '',
-      };
-
-      const session = await Rewriter.create(options);
-      this.sessions.rewriter = session;
-      this.broadcastDownloadStatus('rewriter', 'available');
-      return session;
-    } catch (error) {
-      console.log('Download triggered for rewriter model, monitoring progress...');
-      return null;
     }
   }
 
