@@ -5,6 +5,8 @@ function ModelDownload({ aiStatus, onComplete }) {
     const [isDownloading, setIsDownloading] = useState(false)
     const [downloadPhase, setDownloadPhase] = useState('checking') // checking, ready, downloading, completed
     const [userInitiated, setUserInitiated] = useState(false)
+    const [hasCheckedStatus, setHasCheckedStatus] = useState(false)
+    const [isButtonEnabled, setIsButtonEnabled] = useState(false) 
 
     // Check if download page needs to be shown
     const needsDownload = () => {
@@ -91,34 +93,40 @@ function ModelDownload({ aiStatus, onComplete }) {
         }
     }
 
-    // Initial state check
-    useEffect(() => {
-        if (allModelsReady()) {
-            setDownloadPhase('completed')
-            setTimeout(() => {
-                onComplete()
-            }, 1500)
-        } else if (needsDownload() && downloadPhase === 'checking') {
-            // Check if already downloading
-            const hasDownloading = Object.values(aiStatus).some(status => status === 'downloading');
-            if (hasDownloading) {
-                setDownloadPhase('downloading');
-                setIsDownloading(true);
-                setUserInitiated(true);
-            } else {
-                setDownloadPhase('ready');
-            }
-        }
-    }, [aiStatus])
 
-    // Special handling: if all status are unavailable, force show download page
     useEffect(() => {
-        const allUnavailable = Object.values(aiStatus).every(status => status === 'unavailable');
+        console.log('=== Status Check ===')
+        console.log('aiStatus.prompt:', aiStatus.prompt)
+        console.log('hasCheckedStatus:', hasCheckedStatus)
+        console.log('allModelsReady():', allModelsReady())
+        console.log('needsDownload():', needsDownload())
+        
 
-        if (allUnavailable && downloadPhase === 'checking') {
-            setDownloadPhase('ready');
+        if (!hasCheckedStatus) {
+            const timer = setTimeout(() => {
+                console.log('Checkpoint: Completed first status check, starting second check')
+                setHasCheckedStatus(true);
+                
+            
+                setTimeout(() => {
+
+                    if (allModelsReady()) {
+                        onComplete();
+                        return;
+                    } else if (needsDownload()) {
+                        setDownloadPhase('ready');
+                        setIsButtonEnabled(true); 
+                    } else {
+                        onComplete();
+                    }
+                }, 500); 
+                
+            }, 2000);
+            
+            return () => clearTimeout(timer);
         }
-    }, [aiStatus, downloadPhase])
+        
+    }, [aiStatus, hasCheckedStatus, onComplete])
 
     // Monitor download progress
     useEffect(() => {
@@ -141,6 +149,42 @@ function ModelDownload({ aiStatus, onComplete }) {
     const skipDownload = () => {
         localStorage.setItem('infospark-setup-completed', 'true')
         onComplete()
+    }
+
+    if (!hasCheckedStatus) {
+        return (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-300">
+                    {/* Header bar */}
+                    <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 p-4 text-white relative overflow-hidden">
+                        <div className="absolute inset-0 bg-white/10 backdrop-blur-sm"></div>
+                        <div className="relative z-10">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                            d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-bold">InfoSpark AI</h2>
+                                    <p className="text-blue-100 text-sm">Checking status...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Content area */}
+                    <div className="p-6">
+                        <div className="text-center py-6">
+                            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                            <h3 className="text-lg font-bold text-gray-800 mb-2">Checking AI Model Status</h3>
+                            <p className="text-gray-600 text-sm">Please wait while we check the availability of Gemini Nano...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
     }
 
     if (!needsDownload() || downloadPhase === 'completed') {
@@ -324,16 +368,24 @@ function ModelDownload({ aiStatus, onComplete }) {
                         <div className="flex gap-3">
                             <button
                                 onClick={startDownload}
-                                disabled={isDownloading}
-                                className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 shadow-lg"
+                                disabled={!isButtonEnabled}
+                                className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all duration-200 shadow-lg ${
+                                    isButtonEnabled 
+                                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700' 
+                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                }`}
                             >
-                                {isDownloading ? (
-                                    <div className="flex items-center justify-center gap-2">
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        <span>Starting...</span>
-                                    </div>
+                                {isButtonEnabled ? (
+                                    isDownloading ? (
+                                        <div className="flex items-center justify-center gap-2">
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            <span>Starting...</span>
+                                        </div>
+                                    ) : (
+                                        'Download & Setup'
+                                    )
                                 ) : (
-                                    'Download & Setup'
+                                    'Preparing...'
                                 )}
                             </button>
                             <button

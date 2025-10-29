@@ -8,7 +8,7 @@ import ModelDownload from './components/ModelDownload'
 function App() {
   const [activeTab, setActiveTab] = useState('chat')
   const [showGuide, setShowGuide] = useState(false)
-  const [showModelDownload, setShowModelDownload] = useState(true)
+  const [showModelDownload, setShowModelDownload] = useState(true) 
   const [aiStatus, setAiStatus] = useState({
     prompt: "unavailable",
     writer: "unavailable", 
@@ -17,47 +17,29 @@ function App() {
   const [enablePrompt, setEnablePrompt] = useState(false)
 
   useEffect(() => {
-    // 获取AI状态
     getAiStatus()
-    // 定期更新状态
     const interval = setInterval(getAiStatus, 5000)
     return () => clearInterval(interval)
   }, [])
 
-  // 检查是否需要显示首次设置
   useEffect(() => {
     const hasShownSetup = localStorage.getItem('infospark-setup-completed')
-    // Check if any models need download
-    const needsDownload = Object.values(aiStatus).some(status => 
-      status === 'downloadable' || status === 'unavailable' || status === 'downloading'
-    )
     
-    if (needsDownload) {
-      // If any models need download, force show download page
-      setShowModelDownload(true)
-    } else if (hasShownSetup) {
-      setShowModelDownload(false)
+    if (hasShownSetup) {
+      // If setup is completed, check if any model needs download  
+      const needsDownload = Object.values(aiStatus).some(status => 
+        status === 'downloadable' || status === 'unavailable' || status === 'downloading'
+      )
+      
+      if (needsDownload) {
+        setShowModelDownload(true) 
+      } else {
+        setShowModelDownload(false) 
+      }
     } else {
-      // If setup not completed, ensure download page is shown
       setShowModelDownload(true)
     }
   }, [aiStatus])
-
-  // When model status becomes available, check if download page can be hidden
-  useEffect(() => {
-    const allModelsReady = Object.values(aiStatus).every(status => status === 'available')
-    const needsDownload = Object.values(aiStatus).some(status => 
-      status === 'downloadable' || status === 'unavailable' || status === 'downloading'
-    )
-    
-    if (allModelsReady && showModelDownload) {
-      // If all models are available, hide download page
-      setShowModelDownload(false)
-    } else if (needsDownload && !showModelDownload) {
-      // If models need download but download page not shown, force show
-      setShowModelDownload(true)
-    }
-  }, [aiStatus, showModelDownload])
 
  async function getAiStatus() {
   try {
@@ -97,7 +79,6 @@ function App() {
     }
   }
 
-  // 处理模型下载完成
   const handleModelDownloadComplete = () => {
     localStorage.setItem('infospark-setup-completed', 'true')
     setShowModelDownload(false)
@@ -122,7 +103,7 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col modern-bg p-3">
-      {/* 模型下载浮层 */}
+      {/* Model Download */}
       {showModelDownload && (
         <ModelDownload 
           aiStatus={aiStatus} 
@@ -134,7 +115,7 @@ function App() {
         {/* Compact Header */}
         <header className="mb-3">
           <div className="glass-card-modern p-3">
-            {/* 第一行：Logo + InfoSpark 标题 */}
+            {/* Logo + InfoSpark Title */}
             <div className="flex items-center gap-2 mb-2">
               <div className="logo-modern w-5 h-5">
                 <img src="/logo.png" alt="InfoSpark AI" className="w-full h-full object-contain" />
@@ -144,9 +125,9 @@ function App() {
               </span>
             </div>
 
-            {/* 第二行：状态 + Copilot 控制 */}
+            {/* Second Row: Status + Copilot Control */}
             <div className="flex items-center justify-between bg-slate-50/80 backdrop-filter backdrop-blur-sm rounded-lg p-2 border border-blue-200/50">
-              {/* 状态指示器 */}
+              {/* Status Indicator */}
               <div className="flex items-center gap-3 text-xs">
                 <div className="flex items-center gap-1">
                   <div className={`w-2 h-2 rounded-full ${
@@ -173,10 +154,10 @@ function App() {
                   <span className="text-slate-600 font-medium">Rewriter</span>
                 </div>
               </div>
-              
-              {/* Copilot控制按钮 */}
+
+              {/* Copilot Control Button */}
               <div className="flex items-center gap-2">
-                {/* 调试按钮 - 开发时使用 */}
+                {/* Debug Button - For Development Use */}
                 <button
                   onClick={handleEnableClick}
                   className={`sidepanel-toggle-btn ${enablePrompt ? 'active' : ''}`}
@@ -193,7 +174,7 @@ function App() {
           </div>
         </header>
 
-        {/* Guide 展开/收起行 */}
+        {/* Guide*/}
         <div className="mb-3">
           <button
             onClick={() => setShowGuide(!showGuide)}
@@ -211,8 +192,8 @@ function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          
-          {/* Guide 展开内容 */}
+
+          {/* Guide Content */}
           {showGuide && (
             <div className="mt-2 modern-fade-in">
               <div className="glass-card-modern p-3">
@@ -222,7 +203,7 @@ function App() {
           )}
         </div>
 
-        {/* Sidepanel导航 */}
+        {/* Sidepanel Navigation */}
         <div className="mb-3">
           <nav className="sidepanel-tab-container">
             <button
@@ -240,7 +221,7 @@ function App() {
           </nav>
         </div>
 
-        {/* Sidepanel内容区域 */}
+        {/* Sidepanel Content Area */}
         <main className="glass-card-modern p-4 flex-1 min-h-0">
           {activeTab === 'chat' && (
             <div className="modern-fade-in h-full">
