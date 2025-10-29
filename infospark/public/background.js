@@ -26,6 +26,8 @@ class MessageHandler {
       'RESET_SESSION': this.resetSession.bind(this),
       'UPDATE_COMPLETION_OPTIONS': this.updateCompletionOptions.bind(this),
       'UPDATE_CHAT_CONTEXT': this.updateChatContext.bind(this),
+      'START_MODEL_DOWNLOAD': this.startModelDownload.bind(this),
+      'GET_DOWNLOAD_PROGRESS': this.getDownloadProgress.bind(this),
     };
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -64,17 +66,26 @@ class MessageHandler {
   }
 
   async checkAvailability() {
-    const [promptAvailability, writerAvailability, rewriterAvailability] = await Promise.all([
-      LanguageModel.availability(),
-      Writer.availability(),
-      Rewriter.availability()
-    ]);
+    try {
+      const [promptAvailability, writerAvailability, rewriterAvailability] = await Promise.all([
+        LanguageModel.availability(),
+        Writer.availability(),
+        Rewriter.availability()
+      ]);
 
-    return {
-      prompt: promptAvailability,
-      writer: writerAvailability,
-      rewriter: rewriterAvailability
-    };
+      return {
+        prompt: promptAvailability,
+        writer: writerAvailability,
+        rewriter: rewriterAvailability
+      };
+    } catch (error) {
+      console.error('Error checking availability:', error);
+      return {
+        prompt: 'unavailable',
+        writer: 'unavailable',
+        rewriter: 'unavailable'
+      };
+    }
   }
 
   async getCopilotStatus() {
@@ -119,6 +130,57 @@ class MessageHandler {
     this.sessionManager.destroy('prompt');
     await this.sessionManager.createPromptSession();
     return true;
+  }
+
+  // Start model download
+  async startModelDownload() {
+    try {
+      // Check current status
+      const status = await this.checkAvailability();
+      
+      // Only start download for models that need downloading
+      const downloadPromises = [];
+      
+      if (status.prompt === 'downloadable') {
+        downloadPromises.push(this.sessionManager.triggerPromptDownload());
+      }
+      
+      if (status.writer === 'downloadable') {
+        downloadPromises.push(this.sessionManager.triggerWriterDownload());
+      }
+      
+      if (status.rewriter === 'downloadable') {
+        downloadPromises.push(this.sessionManager.triggerRewriterDownload());
+      }
+
+      if (downloadPromises.length === 0) {
+        return {
+          success: true,
+          message: 'No models need downloading'
+        };
+      }
+
+      // Start download but don't wait for completion
+      Promise.all(downloadPromises).catch(error => {
+        console.error('Download error:', error);
+      });
+      
+      return {
+        success: true,
+        message: 'Model downloads started'
+      };
+    } catch (error) {
+      console.error('Failed to start model download:', error);
+      throw error;
+    }
+  }
+
+  // Async function to get download progress
+  async getDownloadProgress() {
+    return {
+      progress: this.sessionManager.downloadProgress,
+      status: this.sessionManager.downloadStatus
+    };
   }
 }
 
@@ -187,6 +249,74 @@ class SessionManager {
       writer: null,
       rewriter: null,
     };
+    this.downloadProgress = {
+      prompt: 0,
+      completion: 0,
+      writer: 0,
+      rewriter: 0
+    };
+    this.downloadStatus = {
+      prompt: 'unknown',
+      completion: 'unknown', 
+      writer: 'unknown',
+      rewriter: 'unknown'
+    };
+  }
+
+  // Broadcast download progress to frontend
+  broadcastDownloadProgress(type, progress) {
+    this.downloadProgress[type] = progress;
+    
+    // Send message to all tabs
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach(tab => {
+        chrome.tabs.sendMessage(tab.id, {
+          type: 'MODEL_DOWNLOAD_PROGRESS',
+          data: {
+            modelType: type,
+            progress: progress,
+            allProgress: this.downloadProgress
+          }
+        }, () => {
+          // Ignore errors, some pages might not have content script
+          if (chrome.runtime.lastError) {
+            // Silent ignore
+          }
+        });
+      });
+    });
+
+    // Send message to sidepanel
+    chrome.runtime.sendMessage({
+      type: 'MODEL_DOWNLOAD_PROGRESS',
+      data: {
+        modelType: type,
+        progress: progress,
+        allProgress: this.downloadProgress
+      }
+    }, () => {
+      if (chrome.runtime.lastError) {
+        // Silent ignore
+      }
+    });
+  }
+
+  // Broadcast download status changes
+  broadcastDownloadStatus(type, status) {
+    this.downloadStatus[type] = status;
+    
+    chrome.runtime.sendMessage({
+      type: 'MODEL_STATUS_CHANGED',
+      data: {
+        modelType: type,
+        status: status,
+        allStatus: this.downloadStatus
+      }
+    }, () => {
+      if (chrome.runtime.lastError) {
+        // Silent ignore
+      }
+    });
   }
 
   destroy(type) {
@@ -214,17 +344,37 @@ class SessionManager {
       content: "You're a helpful assistant. Answer the user's questions based on the provided context." + (content || "")
     }];
 
-    this.sessions.prompt = await LanguageModel.create({
-      initialPrompts,
-      temperature: 0.7,
-      topK: 3,
-      monitor: (m) => {
-        m.addEventListener('downloadprogress', (e) => {
-          console.log(`Prompt model: ${(e.loaded * 100).toFixed(1)}%`);
-        });
-      },
-    });
+    // First check availability
+    const availability = await LanguageModel.availability();
+    this.broadcastDownloadStatus('prompt', availability);
 
+    // If not available status, throw error instead of trying to create
+    if (availability !== 'available') {
+      throw new Error(`Language model is ${availability}. Please wait for download to complete or check model availability.`);
+    }
+
+    try {
+      this.sessions.prompt = await LanguageModel.create({
+        initialPrompts,
+        temperature: 0.7,
+        topK: 3,
+        monitor: (m) => {
+          m.addEventListener('downloadprogress', (e) => {
+            const progress = e.loaded * 100;
+            this.broadcastDownloadProgress('prompt', progress);
+          });
+        },
+      });
+    } catch (error) {
+      console.error('Failed to create prompt session:', error);
+      // Re-check status
+      const newAvailability = await LanguageModel.availability();
+      this.broadcastDownloadStatus('prompt', newAvailability);
+      throw error;
+    }
+
+    // Update status on successful creation
+    this.broadcastDownloadStatus('prompt', 'available');
     return this.sessions.prompt;
   }
 
@@ -236,17 +386,38 @@ class SessionManager {
       content: "You are a precise writing assistant. When given text, continue it with ONLY the next logical sentence or phrase. Rules: 1) Complete the current thought if incomplete, 2) Add only 1 sentence if complete, 3) Never write multiple paragraphs, 4) Stop at first natural sentence ending, 5) Be contextually relevant and concise."
     }];
 
-    this.sessions.completion = await LanguageModel.create({
-      initialPrompts,
-      temperature: 0.6,
-      topK: 3,
-      monitor: (m) => {
-        m.addEventListener('downloadprogress', (e) => {
-          console.log(`Completion model: ${(e.loaded * 100).toFixed(1)}%`);
-        });
-      },
-    });
+    // First check availability
+    const availability = await LanguageModel.availability();
+    this.broadcastDownloadStatus('completion', availability);
 
+    // If not available status, throw error instead of trying to create
+    if (availability !== 'available') {
+      throw new Error(`Language model is ${availability}. Please wait for download to complete or check model availability.`);
+    }
+
+    try {
+      this.sessions.completion = await LanguageModel.create({
+        initialPrompts,
+        temperature: 0.6,
+        topK: 3,
+        monitor: (m) => {
+          m.addEventListener('downloadprogress', (e) => {
+            const progress = e.loaded * 100;
+            this.broadcastDownloadProgress('completion', progress);
+            console.log(`Completion model: ${progress.toFixed(1)}%`);
+          });
+        },
+      });
+    } catch (error) {
+      console.error('Failed to create completion session:', error);
+      // Re-check status
+      const newAvailability = await LanguageModel.availability();
+      this.broadcastDownloadStatus('completion', newAvailability);
+      throw error;
+    }
+
+    // Update status on successful creation
+    this.broadcastDownloadStatus('completion', 'available');
     return this.sessions.completion;
   }
   async createWriterSession() {
@@ -258,22 +429,128 @@ class SessionManager {
       format: 'plain-text',
       sharedContext: '',
     };
+    const availability = await Writer.availability();
+    this.broadcastDownloadStatus('writer', availability);
 
-    this.sessions.writer = await Writer.create(options);
-    return this.sessions.writer;
+    // If not available status, throw error instead of trying to create
+    if (availability !== 'available') {
+      throw new Error(`Writer is ${availability}. Please wait for download to complete or check writer availability.`);
+    }
+
+    try {
+      this.sessions.writer = await Writer.create(options);
+
+      // Update status on successful creation
+      this.broadcastDownloadStatus('writer', 'available');
+      return this.sessions.writer;
+    } catch (error) {
+      console.error('Failed to create writer session:', error);
+      // Re-check status
+      const newAvailability = await Writer.availability();
+      this.broadcastDownloadStatus('writer', newAvailability);
+      throw error;
+    }
   }
 
   async createRewriterSession() {
     if (this.sessions.rewriter) return this.sessions.rewriter;
+    
     const options = await this.getStorageValue('rewriterOptions') || {
       tone: 'as-is',
       format: 'as-is',
       length: 'as-is',
       sharedContext: '',
     };
+    const availability = await Rewriter.availability();
+    this.broadcastDownloadStatus('rewriter', availability);
+    if (availability !== 'available') {
+      throw new Error(`Rewriter is ${availability}. Please wait for download to complete or check rewriter availability.`);
+    }
 
-    this.sessions.rewriter = await Rewriter.create(options);
-    return this.sessions.rewriter;
+    try {
+      this.sessions.rewriter = await Rewriter.create(options);
+      this.broadcastDownloadStatus('rewriter', 'available');
+      return this.sessions.rewriter;
+    } catch (error) {
+      console.error('Failed to create rewriter session:', error);
+      // Re-check status
+      const newAvailability = await Rewriter.availability();
+      this.broadcastDownloadStatus('rewriter', newAvailability);
+      throw error;
+    }
+  }
+
+  // Methods specifically for triggering downloads
+  async triggerPromptDownload() {
+    console.log('Triggering prompt model download...');
+    try {
+      const content = await this.getStorageValue('prompt_content');
+      const initialPrompts = [{
+        role: 'system',
+        content: "You're a helpful assistant. Answer the user's questions based on the provided context." + (content || "")
+      }];
+
+      const session = await LanguageModel.create({
+        initialPrompts,
+        temperature: 0.7,
+        topK: 3,
+        monitor: (m) => {
+          m.addEventListener('downloadprogress', (e) => {
+            const progress = e.loaded * 100;
+            this.broadcastDownloadProgress('prompt', progress);
+            console.log(`Prompt model download: ${progress.toFixed(1)}%`);
+          });
+        },
+      });
+      
+      this.sessions.prompt = session;
+      this.broadcastDownloadStatus('prompt', 'available');
+      return session;
+    } catch (error) {
+      console.log('Download triggered for prompt model, monitoring progress...');
+      // Even if failed, it may be because the download is in progress
+      return null;
+    }
+  }
+
+  async triggerWriterDownload() {
+    console.log('Triggering writer model download...');
+    try {
+      const options = await this.getStorageValue('writerOptions') || {
+        tone: 'neutral',
+        length: 'medium',
+        format: 'plain-text',
+        sharedContext: '',
+      };
+
+      const session = await Writer.create(options);
+      this.sessions.writer = session;
+      this.broadcastDownloadStatus('writer', 'available');
+      return session;
+    } catch (error) {
+      console.log('Download triggered for writer model, monitoring progress...');
+      return null;
+    }
+  }
+
+  async triggerRewriterDownload() {
+    console.log('Triggering rewriter model download...');
+    try {
+      const options = await this.getStorageValue('rewriterOptions') || {
+        tone: 'as-is',
+        format: 'as-is',
+        length: 'as-is',
+        sharedContext: '',
+      };
+
+      const session = await Rewriter.create(options);
+      this.sessions.rewriter = session;
+      this.broadcastDownloadStatus('rewriter', 'available');
+      return session;
+    } catch (error) {
+      console.log('Download triggered for rewriter model, monitoring progress...');
+      return null;
+    }
   }
 
   async getStorageValue(key) {

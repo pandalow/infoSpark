@@ -3,10 +3,12 @@ import './App.css'
 import Context from './components/Context'
 import Chat from './components/Chat'
 import Guide from './components/Guide'
+import ModelDownload from './components/ModelDownload'
 
 function App() {
   const [activeTab, setActiveTab] = useState('chat')
   const [showGuide, setShowGuide] = useState(false)
+  const [showModelDownload, setShowModelDownload] = useState(true)
   const [aiStatus, setAiStatus] = useState({
     prompt: "unavailable",
     writer: "unavailable", 
@@ -21,6 +23,41 @@ function App() {
     const interval = setInterval(getAiStatus, 5000)
     return () => clearInterval(interval)
   }, [])
+
+  // 检查是否需要显示首次设置
+  useEffect(() => {
+    const hasShownSetup = localStorage.getItem('infospark-setup-completed')
+    // Check if any models need download
+    const needsDownload = Object.values(aiStatus).some(status => 
+      status === 'downloadable' || status === 'unavailable' || status === 'downloading'
+    )
+    
+    if (needsDownload) {
+      // If any models need download, force show download page
+      setShowModelDownload(true)
+    } else if (hasShownSetup) {
+      setShowModelDownload(false)
+    } else {
+      // If setup not completed, ensure download page is shown
+      setShowModelDownload(true)
+    }
+  }, [aiStatus])
+
+  // When model status becomes available, check if download page can be hidden
+  useEffect(() => {
+    const allModelsReady = Object.values(aiStatus).every(status => status === 'available')
+    const needsDownload = Object.values(aiStatus).some(status => 
+      status === 'downloadable' || status === 'unavailable' || status === 'downloading'
+    )
+    
+    if (allModelsReady && showModelDownload) {
+      // If all models are available, hide download page
+      setShowModelDownload(false)
+    } else if (needsDownload && !showModelDownload) {
+      // If models need download but download page not shown, force show
+      setShowModelDownload(true)
+    }
+  }, [aiStatus, showModelDownload])
 
  async function getAiStatus() {
   try {
@@ -60,6 +97,11 @@ function App() {
     }
   }
 
+  // 处理模型下载完成
+  const handleModelDownloadComplete = () => {
+    localStorage.setItem('infospark-setup-completed', 'true')
+    setShowModelDownload(false)
+  }
   const getStatusColor = (status) => {
     switch(status) {
       case 'available': return 'text-green-600'
@@ -80,6 +122,14 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col modern-bg p-3">
+      {/* 模型下载浮层 */}
+      {showModelDownload && (
+        <ModelDownload 
+          aiStatus={aiStatus} 
+          onComplete={handleModelDownloadComplete}
+        />
+      )}
+      
       <div className="flex-1 flex flex-col max-w-full">
         {/* Compact Header */}
         <header className="mb-3">
@@ -125,17 +175,20 @@ function App() {
               </div>
               
               {/* Copilot控制按钮 */}
-              <button
-                onClick={handleEnableClick}
-                className={`sidepanel-toggle-btn ${enablePrompt ? 'active' : ''}`}
-              >
-                <div className="flex items-center gap-1">
-                  <div className={`w-2 h-2 rounded-full ${enablePrompt ? 'bg-green-400' : 'bg-gray-400'}`}></div>
-                  <span className="text-xs font-medium">
-                    Copilot {enablePrompt ? 'ON' : 'OFF'}
-                  </span>
-                </div>
-              </button>
+              <div className="flex items-center gap-2">
+                {/* 调试按钮 - 开发时使用 */}
+                <button
+                  onClick={handleEnableClick}
+                  className={`sidepanel-toggle-btn ${enablePrompt ? 'active' : ''}`}
+                >
+                  <div className="flex items-center gap-1">
+                    <div className={`w-2 h-2 rounded-full ${enablePrompt ? 'bg-green-400' : 'bg-gray-400'}`}></div>
+                    <span className="text-xs font-medium">
+                      Copilot {enablePrompt ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
         </header>
