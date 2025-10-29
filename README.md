@@ -1,3 +1,5 @@
+<div align="center">
+
 # InfoSpark AI - Advanced Local AI Writing Assistant
 
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?style=flat-square&logo=google-chrome&logoColor=white)](https://chrome.google.com/webstore)
@@ -5,13 +7,13 @@
 [![Local AI](https://img.shields.io/badge/Powered%20by-Chrome%20Built--in%20AI-FF6B6B?style=flat-square)](https://developer.chrome.com/docs/ai/)
 [![Devpost](https://img.shields.io/badge/Devpost-Hackthon-brightgreen?style=flat-square)](https://devpost.com/software/apply-day)
 
-<div align="center">
-  <a href="docs/README-CN.md" style="margin-right: 20px; text-decoration: none; font-size: 18px;">中文</a>
-  <a href="README.md" style="text-decoration: none; font-size: 18px;">English</a>
+<a href="docs/README-CN.md" style="margin-right: 20px; text-decoration: none; font-size: 18px;">中文</a>
+<a href="README.md" style="text-decoration: none; font-size: 18px;">English</a>
+
+## Demo Video
+[![Watch the demo on YouTube](https://img.youtube.com/vi/kPUfK7g99Tw/0.jpg)](https://www.youtube.com/watch?v=kPUfK7g99Tw)
+
 </div>
-
-
-<iframe width="640" height="360" src="https://www.youtube.com/embed/kPUfK7g99Tw" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 
 ## Overview
 
@@ -23,6 +25,8 @@ It’s quite interesting how this idea started, it actually grew out of my own j
 That’s when I started thinking: what if there was a tool that could instantly refine poor text, automatically generate useful content, and even predict what I might want to say next? As a regular user of code agents, I realized that the Copilot-style interaction perfectly matched what I needed simple, smart, and intuitive for everyday users. I saw it as the ideal way to make text writing more efficient and accessible.
 
 I was genuinely grateful to see Google’s open initiative. It feels like a real gift to the open-source community, timely, empowering, and inspiring!
+
+BY THE WAY: **If you have any job opportunities, feel free to reach out to me via email at [zxj000hugh@gmail.com]!**
 
 ## Features
 ![Model](https://d112y698adiu2z.cloudfront.net/photos/production/software_photos/003/910/095/datas/original.png)
@@ -62,7 +66,15 @@ I was genuinely grateful to see Google’s open initiative. It feels like a real
 ### Prerequisites
 - Chrome Browser 138+ (Required for built-in AI)
 - Device with AI model support capability
-* Before you start using that, please check
+  * Before you start using built, please check the [chrome-ai-developer](https://developer.chrome.com/docs/ai/built-in) page, to ensure your device support the local AI model.
+
+
+!! Notes: Since this extension has not yet been registered in the experimental model sources of Chrome's AI, you need to open the following three links in your browser:
+- chrome://flags/#writer-api-for-gemini-nano
+- chrome://flags/#rewriter-api-for-gemini-nano
+- chrome://flags/#prompt-api-for-gemini-nano
+
+Select **Enabled** for each of them. Then, click **Relaunch** or restart Chrome.
 
 ### Installation
 1. **Clone the repository**
@@ -190,7 +202,7 @@ npm run build
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🌐 Resources & Documentation
+## Resources & Documentation
 
 - **[Chrome AI Documentation](https://developer.chrome.com/docs/ai/)**
 ---
