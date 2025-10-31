@@ -11,6 +11,10 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 // MESSAGE HANDLING
 // =============================================================================
 class MessageHandler {
+  /**
+   * Manages incoming messages and routes them to appropriate handlers.
+   */
+
   constructor(stateManager, sessionManager) {
     this.stateManager = stateManager;
     this.sessionManager = sessionManager;
@@ -18,6 +22,17 @@ class MessageHandler {
   }
 
   setupListeners() {
+    /* 
+      Multiple bind 
+      CHAT_WITH_AI: Handles multi-turn chat interactions with the AI.
+      CHECK_STATUS: Checks the availability status of AI models.
+      GET_COPILOT_STATUS: Get the copilot extension current status in the content script.
+      CREATE_COMPLETION_SESSION: Initializes a new completion session for the AI.
+      RESET_SESSION: Resets the current AI session, clearing any stored data.
+      UPDATE_COMPLETION_OPTIONS: Updates the options for the completion session.
+      UPDATE_CHAT_CONTEXT: Updates the chat context by recreating the prompt session.
+    */
+
     const handlers = {
       'CHAT_WITH_AI': this.handleChat.bind(this),
       'CHECK_STATUS': this.checkAvailability.bind(this),
@@ -195,56 +210,12 @@ class SessionManager {
       writer: null,
       rewriter: null,
     };
-    this.downloadProgress = {
-      prompt: 0,
-      completion: 0,
-      writer: 0,
-      rewriter: 0
-    };
     this.downloadStatus = {
       prompt: 'unknown',
       completion: 'unknown',
       writer: 'unknown',
       rewriter: 'unknown'
     };
-  }
-
-  // Broadcast download progress to frontend
-  broadcastDownloadProgress(type, progress) {
-    this.downloadProgress[type] = progress;
-
-    // Send message to all tabs
-    chrome.tabs.query({}, (tabs) => {
-      tabs.forEach(tab => {
-        chrome.tabs.sendMessage(tab.id, {
-          type: 'MODEL_DOWNLOAD_PROGRESS',
-          data: {
-            modelType: type,
-            progress: progress,
-            allProgress: this.downloadProgress
-          }
-        }, () => {
-          // Ignore errors, some pages might not have content script
-          if (chrome.runtime.lastError) {
-            // Silent ignore
-          }
-        });
-      });
-    });
-
-    // Send message to sidepanel
-    chrome.runtime.sendMessage({
-      type: 'MODEL_DOWNLOAD_PROGRESS',
-      data: {
-        modelType: type,
-        progress: progress,
-        allProgress: this.downloadProgress
-      }
-    }, () => {
-      if (chrome.runtime.lastError) {
-        // Silent ignore
-      }
-    });
   }
 
   // Broadcast download status changes
@@ -295,7 +266,7 @@ class SessionManager {
     this.broadcastDownloadStatus('prompt', availability);
 
     // If not available status, throw error instead of trying to create
-    if (availability !== 'available') {
+    if (availability === 'unavailable') {
       throw new Error(`Language model is ${availability}. Please wait for download to complete or check model availability.`);
     }
 
@@ -307,8 +278,7 @@ class SessionManager {
         topK: 3,
         monitor: (m) => {
           m.addEventListener('downloadprogress', (e) => {
-            const progress = e.loaded * 100;
-            this.broadcastDownloadProgress('prompt', progress);
+            console.log('Prompt model download progress:', e.loaded * 100);
           });
         },
       });
@@ -351,7 +321,6 @@ class SessionManager {
         monitor: (m) => {
           m.addEventListener('downloadprogress', (e) => {
             const progress = e.loaded * 100;
-            this.broadcastDownloadProgress('completion', progress);
             console.log(`Completion model: ${progress.toFixed(1)}%`);
           });
         },
