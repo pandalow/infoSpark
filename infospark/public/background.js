@@ -575,8 +575,6 @@ class StreamHandler {
 // =============================================================================
 // MAIN APPLICATION
 // =============================================================================
-
-
 class AIAssistantBackground {
   constructor() {
     this.stateManager = new StateManager();
